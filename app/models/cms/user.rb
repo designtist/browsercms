@@ -19,6 +19,9 @@ module Cms
     has_many :user_group_memberships, :class_name => 'Cms::UserGroupMembership'
     has_many :groups, :through => :user_group_memberships, :class_name => 'Cms::Group'
     has_many :tasks, :foreign_key => "assigned_to_id", :class_name => 'Cms::Task'
+    
+    has_many :product_client_mappings, :class_name => 'BcmsProductCenter::ProductClientMapping'
+    has_many :products, :through => :product_client_mappings, :class_name => 'BcmsProductCenter::Product'
 
     scope :active, :conditions => ["expires_at IS NULL OR expires_at > ?", Time.now.utc]
     scope :able_to_edit_or_publish_content,
