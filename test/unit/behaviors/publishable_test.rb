@@ -13,24 +13,24 @@ ActiveRecord::Base.connection.instance_eval do
 
   drop_table(:publishable_blocks) if table_exists?(:publishable_blocks)
   drop_table(:publishable_block_versions) if table_exists?(:publishable_block_versions)
-  create_content_table(:publishable_blocks, :prefix=>false) do |t|
+  create_content_table(:publishable_blocks) do |t|
     t.string :name
   end
 end
 
 class Publishable < ActiveRecord::Base
   is_publishable
-  attr_accessible :name
+ #attr_accessible :name
 end
 
 class Unpublishable < ActiveRecord::Base
-  attr_accessible :name
+ #attr_accessible :name
 
 end
 
 class PublishableBlock < ActiveRecord::Base
   acts_as_content_block
-  attr_accessible :name
+ #attr_accessible :name
 end
 
 class PublishableBlockTestCase < ActiveSupport::TestCase
@@ -45,7 +45,7 @@ class PublishableBlockTestCase < ActiveSupport::TestCase
 
   test "#live? if there are draft versions" do
     @object.name = "New Name"
-    @object.save!
+    @object.save_draft
 
     assert_equal false, @object.live?
     assert_equal :draft, @object.status
@@ -69,14 +69,14 @@ class PublishableTestCase < ActiveSupport::TestCase
 
   def test_publish_on_save
     @object.publish_on_save = true
-    assert @object.save
+    assert @object.save!
     assert @object.reload.published?
   end
 
   def test_unpublishable
     @object = Unpublishable.new(:name => "New Record")
     assert !@object.publishable?
-    assert @object.save
+    assert @object.save!
     assert !@object.publishable?
   end
 

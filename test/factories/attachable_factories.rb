@@ -1,22 +1,19 @@
 # Factories for testing Attachable Blocks
 class VersionedAttachable < ActiveRecord::Base
-  acts_as_content_block
+  acts_as_content_block content_module: false
 
   # Not sure why this is needed, but tests fail from rake if not here
-  attr_accessible :name
+ #attr_accessible :name
   has_attachment :document
 end
 
 class HasManyAttachments < ActiveRecord::Base
-  acts_as_content_block
+  acts_as_content_block content_module: false
   has_many_attachments :documents
-
-  # Necessarily only for rake tests to make mass assignment work
-  attr_accessible :name
 end
 
 class HasThumbnail < ActiveRecord::Base
-  acts_as_content_block
+  acts_as_content_block content_module: false
   has_attachment :document, :styles => {:thumbnail => "50x50"}
 end
 
@@ -82,7 +79,7 @@ FactoryGirl.define do
 
   factory :catalog_attachment, :class => Cms::Attachment do |m|
     m.attachment_name "photos"
-    m.attachable_type "Catalog"
+    m.attachable_type "Dummy::Catalog"
     m.data { mock_text_file }
     m.parent { find_or_create_root_section }
     m.publish_on_save true

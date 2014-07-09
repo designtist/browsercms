@@ -10,20 +10,25 @@ Feature: Manage Html Blocks
       | Hello CMS |
     Given I request /cms/html_blocks
     Then the response should be 200
-    Then "Text" should be selected as the current Content Type
+    Then I should be returned to the Assets page for "Text"
     And I should see the following content:
       | Hello CMS     |
-      | Include body? |
+
+  Scenario: Save but not publish a New Block
+    Given I request /cms/html_blocks/new
+    Then I should see a page named "Add a New Text"
+    When I fill in "Name" with "Hello World"
+    And I click the Save button
+    Then I should see the View Text page
+    And I should see it's draft mode
 
   Scenario: Publishing a New Block
     Given I request /cms/html_blocks/new
-    Then I should see a page titled "Add New Text"
+    Then I should see a page named "Add a New Text"
     When I fill in "Name" with "Hello World"
-    And I click on "Save And Publish"
-    Then I should see a page titled "Content Library / View Text"
-    And I should see the following content:
-      | published               |
-      | View Text 'Hello World' |
+    And I Save And Publish
+    Then I should see the View Text page
+    And the content should be published
 
   Scenario: Publishing an existing block
     Given the following Html blocks exist:
@@ -31,18 +36,9 @@ Feature: Manage Html Blocks
       | 100 | Hello |
     When I request /cms/html_blocks/100/edit
     When I fill in "Name" with "Hello World"
-    And I click on "Save And Publish"
-    Then I should see a page titled "Content Library / View Text"
-    And I should see the following content:
-      | published               |
-      | View Text 'Hello World' |
-
-  Scenario: View Usages
-    Given html with "Hello World" has been added to a page
-    When I view that block
-    Then the response should be 200
-    And the page header should be "View Text"
-    And I should see "Used on: 1 page"
+    And I Save And Publish
+    Then I should see the View Text page
+    And the content should be published
 
   Scenario: Multiple Pages
     Given there are multiple pages of html blocks in the Content Library
@@ -50,4 +46,9 @@ Feature: Manage Html Blocks
     Then I should see the paging controls
     And I click on "next_page_link"
     Then I should see the second page of content
-  
+
+  Scenario: Draft Html Block
+    Given I have an Html block in draft mode
+    When I view that block
+    And I should see that block's content
+    And I should see it's draft mode

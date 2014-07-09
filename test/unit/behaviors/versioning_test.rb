@@ -22,11 +22,16 @@ module Cms
 
     end
 
+    test "#draft_version? for new" do
+      assert_equal true, Cms::HtmlBlock.new.draft_version?
+    end
+
     test "Saving a new record should create two rows, one in html_blocks, one in html_block_versions" do
       block = Cms::HtmlBlock.new(:name => "Name is required.")
       assert_equal true, block.save!
       assert_equal 1, block.versions.size
     end
+
 
     test "Saving a new Versioned block should allow after_save callbacks to work" do
       block = Cms::HtmlBlock.new(:name => "Testing")
@@ -73,14 +78,13 @@ module Cms
   class HistoricalVersionsTest < ActiveSupport::TestCase
 
     def setup
-      @published_block = create(:html_block, :name => "Version 1", :publish_on_save => true)
-      @published_block.update_attributes(:name => "Version 2")
+      @published_block = create(:html_block, :name => "Version 1")
+      @published_block.update_attributes(:name => "Version 2", :publish_on_save => false)
       @published_block.reload
     end
 
     test "#build_object_from_version recreates a block based on a given version record" do
-      html_version = Cms::HtmlBlock::Version.first
-
+      html_version = @published_block.versions[0]
       html = html_version.build_object_from_version
 
       assert_equal "Version 1", html.name

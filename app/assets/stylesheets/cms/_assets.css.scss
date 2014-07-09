@@ -1,0 +1,60 @@
+/* ASSETS PAGE */
+@mixin status-icon($background) {
+  color: white;
+  text-transform: uppercase;
+  background: $background;
+  font-weight: 700;
+  padding: 2px 5px;
+  @include border-radius(2px);
+  @include rem(font-size,0.875rem);
+  -webkit-font-smoothing: antialiased;
+  display: inline-block;
+  vertical-align: top;
+  float: right;
+}
+
+.assets {
+	input[type=checkbox] {
+		margin-right: 0;
+	}
+
+	.check-cell {
+		@include rem(width,2rem);
+	}
+
+
+	.draft {
+		@include status-icon($danger);
+	}
+
+    .published {
+        @include status-icon($success);
+    }
+
+	.caret {
+		margin-left: 10px;
+		color: $dark;
+		@include opacity(0.6);
+
+		&:hover {
+			text-decoration: none;
+			@include opacity(0.8);
+		}
+	}
+
+	tbody {
+		tr {
+			position: relative;
+
+			&:hover {
+				background: rgba($gray,0.175);
+				cursor: pointer;
+			}
+		}
+	}
+}
+
+// Iframe for attachments
+#asset_add_uploader {
+  display: none;
+}

@@ -7,6 +7,10 @@ module Cms
       @root = create(:root_section)
     end
 
+    test ".permitted_params allows mass assignment of :group_ids" do
+      assert Cms::Section.permitted_params.include?({group_ids: []})
+    end
+
     test "prepending_path" do
       assert_equal "/", Section.new(:path => "/").prependable_path
       assert_equal "/system/", Section.new(:path => "/system").prependable_path
@@ -142,6 +146,13 @@ module Cms
       assert_decremented section_node_count, Cms::SectionNode.count
     end
 
+    test "Homepage should not be #deletable?" do
+      home = build(:page)
+      home.path = "/"
+
+      refute home.section_node.deletable?, "Should not be able to delete the homepage as this will cause problems for sites."
+    end
+
     def test_creating_page_with_reserved_path
       @section = Cms::Section.new(:name => "FAIL", :path => "/cms")
       assert_not_valid @section
@@ -170,7 +181,7 @@ module Cms
 
     def test_new_section_with_groups
       section = Cms::Section.new(:allow_groups => :all)
-      assert_equal Cms::Group.all, section.groups
+      assert_equal Cms::Group.all.to_a, section.groups.to_a
 
     end
 
@@ -264,10 +275,22 @@ module Cms
       refute create(:section).public?
     end
 
-    test "#sitemap" do
-      sitemap = Section.sitemap
-      assert_equal root_section.node, sitemap.keys.first
-      assert_equal [@visible_section, @hidden_section, @visible_page, @hidden_page].map { |n| n.section_node }, sitemap[root_section.node].keys
+    test "#sitemap should return root_section as key" do
+      assert_equal root_section.node, Section.sitemap.keys.first
+    end
+
+    test "#sitemap should include visible pages" do
+      assert_equal [@visible_section, @hidden_section, @visible_page, @hidden_page], content_in_root_section
+    end
+
+    test "#sitemap should exclude files" do
+      refute content_in_root_section.include?(@file_block)
+    end
+
+    test "#sitemap should include addressable content blocks" do
+      product = Dummy::Product.create!(name: "Hello", parent: root_section)
+      assert child_nodes_in(root_section).include?(product), "Verify product is in root section"
+      assert content_in_root_section.include?(product), "Verify it doesn't get filtered out when returned by sitemap'"
     end
 
     test "#master_section_list" do
@@ -279,5 +302,39 @@ module Cms
       assert_equal "#{@hidden_section.name}", sections[2].full_path
     end
 
+
+    private
+
+    def child_nodes_in(section)
+      section.child_nodes.map { |sn| sn.node }
+    end
+
+    # Pages/section/etc in / that is visible in the sitemap
+    def content_in_root_section
+      Section.sitemap.first[1].keys.map { |sn| sn.node }
+    end
   end
+
+  class SectionAccessiblityTest < ActiveSupport::TestCase
+
+      def public_sections
+        [public_section]
+      end
+
+      def public_section
+        @public_section ||= create(:public_section)
+      end
+
+      def protected_section
+        @protected_section ||= create(:protected_section)
+      end
+
+      test "accessible_to_guests?" do
+        assert public_section.accessible_to_guests?(public_sections, public_section.parent)
+      end
+
+      test "pages in restricted sections are not accessible_to_guests?" do
+        refute protected_section.accessible_to_guests?(public_sections, public_section.parent)
+      end
+    end
 end

@@ -1,16 +1,15 @@
 module Cms
   class DynamicViewsController < Cms::BaseController
 
-    layout 'cms/administration'
+    include Cms::AdminTab
     check_permissions :administrate
 
-    before_filter :set_menu_section
     before_filter :load_view, :only => [:show, :edit, :update, :destroy]
 
     helper_method :dynamic_view_type
 
     def index
-      @views = dynamic_view_type.paginate(:page => params[:page], :order => "name")
+      @views = dynamic_view_type.paginate(:page => params[:page]).order("name")
     end
 
     def new
@@ -18,10 +17,10 @@ module Cms
     end
 
     def create
-      @view = dynamic_view_type.new(params[view_param_name])
+      @view = dynamic_view_type.new(dynamic_view_params)
       if @view.save
         flash[:notice] = "#{dynamic_view_type} '#{@view.name}' was created"
-        redirect_to cms_index_path_for(dynamic_view_type)
+        redirect_to engine_aware_path(dynamic_view_type)
       else
         render :action => "new"
       end
@@ -32,9 +31,9 @@ module Cms
     end
 
     def update
-      if @view.update_attributes(params[view_param_name])
+      if @view.update(dynamic_view_params)
         flash[:notice] = "#{dynamic_view_type} '#{@view.name}' was updated"
-        redirect_to cms_index_path_for(dynamic_view_type)
+        redirect_to engine_aware_path(dynamic_view_type)
       else
         render :action => "edit"
       end
@@ -43,13 +42,17 @@ module Cms
     def destroy
       @view.destroy
       flash[:notice] = "#{dynamic_view_type} '#{@view.name}' was deleted"
-      redirect_to cms_index_path_for(dynamic_view_type)
+      redirect_to engine_aware_path(dynamic_view_type)
     end
 
     protected
 
+    def dynamic_view_params
+      params.require(view_param_name).permit(dynamic_view_type.permitted_params)
+    end
+
     def view_param_name
-      dynamic_view_type.resource_collection_name
+      dynamic_view_type.model_name.param_key
     end
 
     def dynamic_view_type

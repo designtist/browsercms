@@ -3,10 +3,10 @@
 # their permissions from all groups combined represents what they can do.
 #
 class Cms::Group < ActiveRecord::Base
- GUEST_CODE = "guest"
+  GUEST_CODE = "guest"
 
   has_many :user_group_memberships, :class_name => 'Cms::UserGroupMembership'
-  has_many :users, :through => :user_group_memberships, :class_name => 'Cms::User'
+  has_many :users, :through => :user_group_memberships, :class_name => 'Cms::PersistentUser'
 
   has_many :group_permissions, :class_name => 'Cms::GroupPermission'
   has_many :permissions, :through => :group_permissions, :class_name => 'Cms::Permission'
@@ -16,18 +16,28 @@ class Cms::Group < ActiveRecord::Base
 
   belongs_to :group_type, :class_name => 'Cms::GroupType'
 
-  # :group_type might be a bad idea, but only Admins should be modifying groups anyway
-  attr_accessible :name, :code, :group_type, :permission_ids, :section_ids
-  include Cms::DefaultAccessible
+  extend Cms::DefaultAccessible
+
+  # @override Add extra params
+  def self.permitted_params
+    super + [:group_type_id] +[section_ids: [], permission_ids: []]
+  end
+
 
   validates_presence_of :name
 
-  scope :named, lambda { |n| {:conditions => {:name => n}} }
-  scope :with_code, lambda { |c| {:conditions => {:code => c}} }
+  class << self
+    def named(n)
+      where name: n
+    end
 
+    def with_code(c)
+      where code: c
+    end
+  end
 
-  scope :public, :include => :group_type, :conditions => ["#{Cms::GroupType.table_name}.cms_access = ?", false]
-  scope :cms_access, :include => :group_type, :conditions => ["#{Cms::GroupType.table_name}.cms_access = ?", true]
+  scope :public, -> { where(["#{Cms::GroupType.table_name}.cms_access = ?", false]).includes(:group_type).references(:group_type) }
+  scope :cms_access, -> { where(["#{Cms::GroupType.table_name}.cms_access = ?", true]).includes(:group_type).references(:group_type) }
 
   def guest?
     group_type && group_type.guest?

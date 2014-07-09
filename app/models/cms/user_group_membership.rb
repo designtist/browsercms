@@ -1,9 +1,9 @@
 module Cms
   class UserGroupMembership < ActiveRecord::Base
 
-    include Cms::DefaultAccessible
+    extend Cms::DefaultAccessible
 
     belongs_to :group, :class_name => 'Cms::Group'
-    belongs_to :user, :class_name => 'Cms::User'
+    belongs_to :user, :class_name => 'Cms::PersistentUser'
   end
 end

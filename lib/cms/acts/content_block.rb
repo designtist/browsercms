@@ -15,7 +15,8 @@ module Cms
         def acts_as_content_block(options={})
           defaults = {
               # Set default values here.
-              :allow_attachments => true
+              :allow_attachments => true,
+              :content_module => true
           }
           options = defaults.merge(options)
 
@@ -23,7 +24,7 @@ module Cms
             raise ArgumentError.new ":belongs_to_attachment option is no longer supported. Please use :has_attachments option"
           end
 
-          include Cms::DefaultAccessible
+          extend Cms::DefaultAccessible
           allow_attachments if options[:allow_attachments]
           is_archivable(options[:archiveable].is_a?(Hash) ? options[:archiveable] : {}) unless options[:archiveable] == false
           is_connectable(options[:connectable].is_a?(Hash) ? options[:connectable] : {}) unless options[:connectable] == false
@@ -37,7 +38,12 @@ module Cms
           is_versioned(options[:versioned].is_a?(Hash) ? options[:versioned] : {}) unless options[:versioned] == false
 
           include InstanceMethods
+
+          unless options[:content_module] == false
+            has_content_type
+          end
           extend Cms::Behaviors::Naming
+
         end
 
         module InstanceMethods
@@ -45,7 +51,11 @@ module Cms
             "#{self.class.name.demodulize.titleize} '#{name}'"
           end
         end
+
+
       end
+
+
     end
   end
 end

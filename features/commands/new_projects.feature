@@ -16,8 +16,10 @@ Feature: New Project Generator
     And the file "hello/config/routes.rb" should contain "mount_browsercms"
     And the file "hello/db/seeds.rb" should contain "require File.expand_path('../browsercms.seeds.rb', __FILE__)"
     And a file named "hello/db/browsercms.seeds.rb" should exist
+    And a directory named "hello/hello" should not exist
     And a file named "hello/config/initializers/browsercms.rb" should exist
     And a file named "hello/app/views/layouts/templates/default.html.erb" should exist
+    And a file named "hello/config/initializers/devise.rb" should exist
     And the output should not contain "identical"
     And BrowserCMS should be added the Gemfile
     And the correct version of Rails should be added to the Gemfile
@@ -37,7 +39,7 @@ Feature: New Project Generator
     When I run `bcms new`
     Then the output should contain:
     """
-    bcms new requires at least 1 argument: "bcms new [NAME]".
+    Usage: "bcms new [NAME]".
     """
     And the exit status should be 0
 
@@ -45,6 +47,6 @@ Feature: New Project Generator
     When I run `bcms module`
     Then the output should contain:
     """
-    bcms module requires at least 1 argument: "bcms module [NAME]".
+    Usage: "bcms module [NAME]".
     """
     And the exit status should be 0

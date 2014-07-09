@@ -1,0 +1,23 @@
+<% if @other_version %>
+  <%= render :partial => 'cms/shared/version_conflict_error', :locals => {:other_version => @other_version, :your_version => @page} %>
+  <%= f.hidden_field :lock_version, :value => @other_version.lock_version %>
+<% else %>
+  <%= f.hidden_field :lock_version %>
+<% end %>
+
+<%= f.input :name, placeholder: 'Page Name', as: :name %>
+<%= f.input :path, placeholder: 'Page Path' %>
+<%= f.input :template_file_name, collection: Cms::PageTemplate.options, label: "Template", as: :select, include_blank: false %>
+
+<hr>
+<h3>Search Engine Optimization</h3>
+<%= f.input :title, label: "Browser Title", placeholder: 'Displays page name if left blank.',
+            :hint => "Used for <title> and <h1> elements on pages." %>
+
+<%= f.input :description, label: 'Meta Description', :hint => "(Optional) Used for the meta-description element of the page." %>
+<%= f.input :keywords, :hint => "(Optional) Used for the meta-keyword meta element of the page." %>
+<%= f.input :language %>
+
+<% if @other_version %>
+    <%= render :partial => "cms/shared/version_conflict_diff", :locals => {:other_version => @other_version, :your_version => @page} %>
+<% end %>

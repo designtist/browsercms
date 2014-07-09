@@ -1,12 +1,9 @@
-<%= content_for :html_head do %>
-  <%= stylesheet_link_tag('cms/form_layout') %>
-<% end %>
-<%= form_for(@user) do |f| %>
-  <%= f.cms_error_messages %>
-  <%= render :partial => 'user_fields', :locals => {:f => f} unless @change_password %>
-  <%= render :partial => 'password', :locals => {:f => f} if @user.new_record? %>
-  <%= render :partial => 'groups' %>
-  <div class="buttons">
-    <%= lt_button_wrapper(f.submit("Save", :class => "submit")) %>
-  </div>
+<%= simple_form_for(@user.becomes(Cms::User), html: {autocomplete: 'off'}) do |f| %>
+    <%=  page_title_with_buttons(f, 'save_buttons') %>
+    <%= render layout: 'main_with_sidebar' do %>
+        <%= render :partial => 'user_fields', :locals => {:f => f} unless @change_password %>
+        <%= render :partial => 'password', :locals => {:f => f} if @user.new_record? %>
+        <%= f.association :groups, as: :check_boxes %>
+    <% end %>
+    <%= bottom_buttons(f, 'save_buttons') %>
 <% end %>

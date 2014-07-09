@@ -5,7 +5,7 @@ module Cms
     # Skip sanitizing attributes from mass assignment. This should be used sparingly, since it bypasses security.
     # Ideally used for dynamically created classes (like ::Version or ::Attribute) where the attributes are not known at
     # design time.
-    def sanitize(attributes, authorizer)
+    def sanitize(klass, attributes, authorizer)
       attributes
     end
   end
@@ -86,7 +86,6 @@ module Cms
           before_validation :initialize_version
           before_save :build_new_version
           attr_accessor :skip_callbacks
-          attr_accessible :version_comment
 
           #Define the version class
           #puts "is_version called for #{self}"
@@ -96,7 +95,7 @@ module Cms
             end
 
             include VersionRecord
-            self.mass_assignment_sanitizer = Cms::IgnoreSanitizer.new
+            #self.mass_assignment_sanitizer = Cms::IgnoreSanitizer.new
 
             def versioned_class
               self.class.versioned_class
@@ -155,7 +154,7 @@ module Cms
           #Rails 3 could use update_column here instead
           if respond_to? :latest_version
             sql = "UPDATE #{self.class.table_name} SET latest_version = #{draft.version} where id = #{self.id}"
-            connection.execute sql
+            self.class.connection.execute sql
             self.latest_version = draft.version # So we don't need to #reload this object. Probably marks it as dirty though, which could have weird side effects.
           end
         end
@@ -192,16 +191,6 @@ module Cms
             "Changed #{(changes.keys - %w[  version created_by_id updated_by_id  ]).sort.join(', ')}"
           end
         end
-
-        def publish_if_needed
-          #logger.debug { "#{self.class}#publish_if_needed. publish? = '#{!!@publish_on_save}'" }
-
-          if @publish_on_save
-            publish
-            @publish_on_save = nil
-          end
-        end
-
 
         #
         #ActiveRecord 3.0.0 call chain
@@ -264,11 +253,17 @@ module Cms
           save(:validate => perform_validations) || raise(ActiveRecord::RecordNotSaved.new(errors.full_messages))
         end
 
+        # Returns the most recently created Version for this class. Drafts are the most recent change from
+        # the _versions table for a given content item.
+        #    i.e. For Cms::Page, this would return Cms::Page::Version
+        #
+        # @return [<Class>::Version] The version for this class that represents the draft.
         def draft
-          versions.first(:order => "version desc")
+          versions.order("version desc").first
         end
 
         def draft_version?
+          return true unless draft
           version == draft.version
         end
 
@@ -285,7 +280,7 @@ module Cms
         end
 
         def find_version(number)
-          versions.first(:conditions => {:version => number})
+          versions.where(:version => number).first
         end
 
         def as_of_draft_version
@@ -324,6 +319,7 @@ module Cms
 
           self.after_revert(revert_to_version) if self.respond_to?(:after_revert)
           self.version_comment = "Reverted to version #{version}"
+          self.publish_on_save = false
           self
         end
 

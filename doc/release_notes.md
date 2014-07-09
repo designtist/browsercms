@@ -1,3 +1,290 @@
+# v4.0.0.beta
+
+* List Portlet [#678] - A convenient way to find content without custom coding.
+* NameInput [#682] - Improved :name input allows for consistent name fields look/feel. New content will be generated with it.
+* [Fixes #684] Forgot Password
+
+  * /cms/forgot-password doesn't exist
+  * Reenable the forgot password link (/forgot-password)
+  * The edit_password page (pulled from email) doesn't work when followed.
+
+## [#678] List Portlet
+
+This portlet is provides a configurable means to query for and display content without coding, similar to a greatly simplified Drupal views. The intent is to handle easy cases of finding a few content items without needing to create a full portlet. The following configuration options are supported:
+
+1. Content Type - User can select any available content type to list.
+2. Limit - Restrict the max results to some number (i.e. 5). Can be left blank to find all.
+3. Order - The results list can be ordered based on fields specific to each content type.
+4. Reverse order - Change the sorting order (asc to desc).
+5. View As - Results can be shown as a list or a table. Views can be customized as well.
+
+### Customizable Views
+
+Each list portlet can also have its own specific view that overrides the default list or table view. Developers can add a new file in a specific location, based on the name of the portlet. This view will then be used when showing the portlet. The exact path for each portlet is displayed in the sidebar. If using a table view, this will almost always need to be overriden since there is no way to configure which columns to show in the portlet.
+
+Other bug fixes: https://github.com/browsermedia/browsercms/issues?milestone=22&state=closed
+
+
+# v4.0.0.alpha
+
+Try it! gem install browsercms --pre
+
+See (and please help with!) current bug list here: https://github.com/browsermedia/browsercms/issues?milestone=22&state=open
+
+## Major Features
+
+This release includes the following major features:
+
+* User Interface Redesign - User interface has been complete redesigned from the ground up. The new UI is based on Twitter Bootstrap, has usability enhancements as well as an improved design.
+* True In Context Editing [#566] - Editors can directly edit Html content and page titles using CKEditor's inline capability.
+* Rails 4 Upgrade [#617] - BrowserCMS is now designed to work with Rail 4.0.
+* Ruby 2.0 [#651] - BrowserCMS is now designed to work with Ruby 2, matching the recommended specs for Rails 4. Ruby 1.9.3 and 1.9.2 may still work.
+* Form Builder [#124] - Allow editors to create form pages that can be used to collect information from visitors
+* Addressable Content [#588] - Custom content blocks (i.e. Product, Event, News Articles) can be created directly as pages in the sitemap.
+* Improved Template Storage [#608] - Database managed templates are no longer written out to the file system. Sites should have less permission related issued during deployments. Using Heroku to host sites should be easier as well.
+* Devise Integration [#641] - Devise is now used as standard authentication tool. Upgrading projects will have passwords reset (See upgrade notes for more details).
+* External Users [#644] - Better support for authenticating/authorizing users from external data sources rather than using additional solutions like CAS.
+
+## Other Features/Improvements
+
+In addition to the other major features above, here are some improvements/features of note.
+
+* Portlet Descriptions [#619] - Portlets can now have a description that will be used to provide additional context when users are building/placing them.
+* No need to register Content Types [#621] - Content Blocks will automatically appear in the menus without needing to add them to the database.
+* Using SimpleForm [#623] Reworked all forms to use simple_form (https://github.com/plataformatec/simple_form).
+* Migration Cleanup [#594] Migrations for previous versions have been compressed. This has implications for upgrading, but should make new project cleaner.
+* Consistent table prefixes [#639] All core cms tables will now start with cms_ rather than being configurable.
+* Content Blacklisting - Portlets can be blacklisted via configuration so that they can't be created. Several previously stock types are blacklisted.
+* Refined Content API [#256] [#582][#584] - Make content blocks closer in behavior to ActiveRecord.
+
+## UI Redesign
+
+The entire UI has been reworked to be more streamlined and lightweight. It is now built using Twitter Bootstrap, and makes better use of global menus and toolbars. Here are the notable changes.
+
+1. Global Menu - Many commons functions can now be invoked directly from the main menu, including adding new content or users.
+1. Smart 'New' button - Users can add content from any page in the CMS. The "New" button is a split button that can either add a specific type of content, or will 'guess' based on where a user is in the site.
+1. Sitemap - Each row now has hover buttons to edit/remove content rather than needing to select a row then click a button menu.
+1. Assets/Asset Library - The content library has been renamed to be called assets.
+
+## In Context Editing
+
+Users can now edit most HTML content directly in the page. Icons indicate the area of the pages that are editable. Here are some of the highlights:
+
+1. No need to toggle the editor on/off. Just click the area of the page you want to edit.
+1. Full Edit - Click to edit in full text editor. Any changes made will be saved before going to the full editor. There is also a edit button on each block in the upper right hand corner.
+1. Remove blocks from page - Editors can select a block then remove it from the page via a button on the editor. Users will be prompted before its removed.
+1. Reorder content - Can move content blocks up or down within a page. Page will refresh after moving.
+1. Editable Page titles - Page title can be edited directly from the header.
+1. Preview Page - Editors can now preview the page without a toolbar or editing controls.
+1. Non-incontext Content - Not all content makes sense to be inline editable (for example portlets). For these content types, the previous move/remove/edit links now float in the upper right hand corner of the content block.
+
+## Addressable Content Blocks
+
+Content blocks can created with as their own pages. To make a block addressable, a developer must do the following:
+
+1. Add is_addressable to the model. This will automatically generate a :slug form field when creating/editing instances.
+2. Set the Page Template that should be used (defaults to 'default').
+
+```
+class Product < ActiveRecord::Base
+  is_addressable path: "/products", template: "product"
+end
+```
+
+3. Add the following field to the _form.html.erb.
+
+```
+<%= f.input :slug, as: :path %>
+```
+
+## Form Builder
+
+Allow editors to create form pages that can be used to collect information from visitors (i.e. Contact Us, Support requests, etc). Basically, any quick collect a few fields using a consistent form styling.
+
+### Features include:
+
+1. Forms can have multiple fields which can be text fields, textareas or multiple choice dropdowns. Field management is done via AJAX and fields can be added/reordered/removed without leaving the page.
+2. Fields can be required, have instructions and default values. Choices are added as lines of text for each dropdown field. Dropdowns use the first value as the default.
+3. Entries are stored in the database and can optionally notify someone via email when new submissions are created.
+4. Editors can manage entries via the admin (CRUD)
+5. Visitors can be redirected to another URL after submitting their entry or display a customizable 'success' message.
+6. Forms generate the HTML display using bootstrap's CSS by default. Projects can customize this in the application.rb with config.cms.form_builder_css
+
+## Refined Content API
+
+1. .save now works identically between ActiveRecord and Content Blocks
+
+Previously, calling .save on a block would save a draft copy, rather then updating the record in place. This has been changed. To save a draft, you can do either:
+
+    @block.publish_on_save
+    @block.save
+    # or
+    @block.save_draft
+
+
+## Registering Content Types
+
+Content blocks no longer need to have a separate registration in the database to appear in menus.
+
+Defining a new content model should be sufficient to have it appear in the content library. To specify which module it should appear in, you can configure it like so:
+
+class Widget < ActiveRecord::Base
+  acts_as_content_block
+  content_module :acme
+end
+
+The content_types and content_type_groups tables have been removed as they are no longer necessary. If you don't want a block to appear in the menus, you can specify this via:
+
+class Widget < ActiveRecord::Base
+  acts_as_content_block content_module: false
+end
+
+## Refactor to use SimpleForm
+
+Converted all the internal forms to use SimpleForm rather than our own custom form builder. This provides better consistency with bootstrap forms, as well as well tested API for defining new form inputs. This will primarily affect developers when they create content blocks. New content will be generated using simple_form syntax like so:
+
+```
+<%= f.input :photo, as: :file_picker %>
+```
+
+rather than the older syntax that looks like this:
+
+```
+<%= f.cms_file_field :photo %>
+```
+
+The old form_builder methods like cms_text_field and cms_file_field have been deprecated and will generate warnings when used. These methods are scheduled for removal in BrowserCMS 4.1. It's recommended that custom content blocks be upgraded to use the new syntax when feasible. The deprecation warnings should provide some guideance, but also look at simple_forms documentation http://simple-form.plataformatec.com.br for help.
+
+## Portlet Blacklists
+
+Portlets can be blacklisted so that new instances cannot be created. This can be used to turn off some portlets for security, convience or otherwise. By default, the following portlet types are blacklisted (as 'deprecated').
+
+* LoginPortlet (:login_portlet)
+* DynamicPortlet (:dynamic_portlet)
+* ForgotPasswordPortlet (:forgot_password_portlet)
+
+### Modifying the blacklist
+
+```
+# Prevention creation
+config.cms.content_types.blacklist += [:email_page_portlet]
+
+# Allowing creation
+config.cms.content_types.blacklist -= [:login_portlet]
+```
+
+## Devise Integration
+
+Devise is now the standard authentication mechanism for BrowserCMS. This adds some new (and improved) authentication features including:
+
+* Reset Password - Admin users have a link to reset passwords.
+* Strong Password storage - Passwords are now encrypted using bcrypt which is a safer method (http://codahale.com/how-to-safely-store-a-password/)
+* Remember Me - Allows users to stay logged in for up to two weeks.
+* Devise/Warden APIs - Developers can use Devise and/or Warden's APIs to customize how authenication works. The previous RESTful Authentication based solution was not really pluggable.
+
+### [Warning] Upgrading/Password Reset
+
+Upgrading to 4.0 means all user passwords will need to be reset. This doesn't apply where external user databases are used (i.e. CAS) for authentication. Just user accounts stored in the CMS itself.
+
+This reset is a side effect of using a more secure password encryption algorithm (bcrypt). When users try to log in, they will have to request a password reset. This feature is provided on /cms/login as a standard feature. Users will need to provide an email, and a link for reseting their password will be sent to them. Alternatively, developers may choose to change passwords via the admin interface (or rails console) before turning over sites to the site maintainers.
+
+### Avoiding a reset
+
+For most sites, the number of admin users is likely limited and part of a cohesive team. So forcing a reset shouldn't be an issue. In the case of sites that have large user databases, a migration strategy to mass update or possibly creating a new Warden/Devise strategy based on the 3.5.x encryption strategy. These two are coding exercises left to the developers working on the project.
+
+For sites that need to keep a record of the old encrypted passwords, remove/comment out the following line from the browsercms400 migration which will preserve the old encrypted passwords.
+
+```
+t.remove :crypted_password
+```
+
+Note that preserving the old password data is just the first step. The new encryption strategy will still be used unless modifications are made to the project.
+
+### Forgot Password
+
+Users can reset their password via the admin UI. On /cms/login, a link to 'Forgot Password' is available. Users can enter an email and have the reset link mailed to them.
+
+Configuration: For Forgot Password to work, need to ensure the following is present for mailer in BrowserCMS setups.
+    * config.action_mailer.default_url_options = { :host => "yourhost" }
+
+The core 'ForgotPassword' portlet has been reworked and is probably 100% unnecessary on most sites. It is now blacklisted by default. The portlet now just renders the stock /forgot-password view and isn't editable. Use /forgot-password instead.
+
+## External User API [#644]
+
+There is now a core API for handling users that are authenticated/authorized against external data sources. There is a new class (Cms::ExternalUser) which represents a user which has been authenticated using some source other than the Core CMS. This user can have extra information retained as attribute and can be authorized to be part of a specific group(s).
+
+A sample implementation of an authentication strategy can be found in lib/cms/authentication/test_password_strategy. Strategies are implemented as Devise Strategies and should either login or pass to the next strategy.
+
+Don't forget to enable your new strategy in config/initializers/devise.rb
+```
+# Add test_password strategy BEFORE other CMS authentication strategies
+config.warden do |manager|
+  manager.default_strategies(:scope => :cms_user).unshift :my_custom_strategy
+end
+```
+
+This implementation is intended to replace CAS based strategies used in BrowserCMS 3.x. It provides the ability to style the login page directly, and avoid having an external CAS server software.
+
+## Upgrading
+
+1. Editable Page Titles: In order to take advantage of the editable pages titles, templates need to use the new Template API Method: page_header(). Used rather that <%= page_title %> within h1/h2 etc, this will output an editable page title element for logging in users.
+2. match -> get: Update your config/routes.rb to change any use of 'match' to get or post for your controller.
+3. Install the deprecated finders and other gems to help with upgrade. Once you get rid of the deprecation warnings you can remove the gem.
+4. Content Types - If you have defined content blocks in custom group names, you should edit them to specify the module name. See 'Registering Content Types' above for details. You can delete any seeds that create content types. There will be a deprecation warning if you call save! or create! on ContentTypes.
+5. Forms - Rework existing form fields in content blocks to use SimpleForm.
+6. Table Prefixing - In config/initializers/browsercms.rb remove the `Cms.table_prefix = 'cms_' line, which generated deprecation warnings.
+7. Password Reset - Users will need to reset their password after the upgrade. See Devise Integration/Avoiding a reset if this is concern.
+8. Forgot Password - Consider removing any existing ForgotPassword portlets and just use /forgot-password controller.  Creation is disabled by default.
+9. Reset Password Portlet - These have been removed as they were no longer necessary. Any remaining instances have been converted to 'DeprecatedPlaceholders'. Find and remove these portlets (and the page they were on) from your site.
+10. Login Portlet - Consider removing these and using the built in /login route. Creation is disabled by default.
+
+### Migration Cleanup
+
+Projects using versions older than 3.5.4 must first upgrade to the latest 3.5.x version. This is because we have compressed the migrations from 3.0.0 up to 4.0.0 into a single migration (browsercms300). Migrations, especially those that alter data get hard to maintain over time. And new projects don't care when they start with fresh data.
+
+After migrating your production environment to 3.5.7 do the following:
+
+1. Record the timestamp for the existing 3_0_0 migration (i.e. 20080815014337).
+2. Delete all the BrowserCMS migrations (3_0_0, 314, etc) from the project.
+3. Add the migrations for 4.0.0.
+4. Change the name of the new browsercms300 migration so it matches the old timestamp of browsercms3_0_0. This will prevent the new migration from running.
+
+
+## Deprecations
+
+* page_title("Some Name") is deprecated in favor of use_page_title("Some Name") for overriding a page title. This will be remove in 4.1. This probably will probably only effect changes make in modules or customizations to the core.
+
+v3.5.6
+======
+
+* [#591] Error pages do not render mobile templates
+
+v3.5.5
+======
+
+* Update to Rails 3.2.8 - Ensure tests to pass (there appeared to be some changes in inflection and html_safe between 3.2.5 and 3.2.8)
+
+
+v3.5.4
+======
+
+* [IE and Ckeditor] Fix issue where ckeditor would not load correctly in production for users using Internet Explorer 7-9.
+
+v3.5.3
+======
+
+Bug fixes, with some improvements for upgrading projects from older versions of the CMS.
+
+* [#461] Allow portlets to easily set the page title. This makes it easy for one portlet to render multiple different content blocks, and change the displayed <title> attribute to match the name of the block. For example:
+	
+	def render
+	  @block = Product.find(params[:id])
+	  page_title @block.name
+	end 
+* [#536] Fix bug to make PortletHelpers available in the render.html.erb.
+* [#534] Bug Fix - Ensure image/file blocks can be deleted from the content library.
+* Migrations - Add another migration to handle Rails 2->3 updates (v3.1.4) which should retroactivealy added before v315.
+
 v3.5.2
 ======
 

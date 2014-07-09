@@ -30,11 +30,29 @@ class NewFileTest < ActiveSupport::TestCase
 end
 
 module Cms
+  class SearchFileBlockTest < ActiveSupport::TestCase
+
+    def setup
+      @red = create(:file_block, name: 'red')
+      @another_section = create(:section, name: 'another-section')
+      @blue = create(:file_block, name: 'blue', parent: @another_section)
+      @purple = create(:file_block, name: 'red blue', parent: @another_section)
+    end
+
+    test "#search with section_id" do
+      results = Cms::FileBlock.search(term: 'red').paginate(page: 1).with_parent_id(@red.parent.id)
+      assert_equal [@red], results.to_a
+    end
+
+    test "#search with all sections" do
+      results = Cms::FileBlock.search(term: 'red').paginate(page: 1).with_parent_id('all')
+      assert_equal [@red, @purple], results.to_a
+    end
+  end
   class FileBlockTest < ActiveSupport::TestCase
     def setup
       @file_block = build(:file_block)
     end
-
     test "file_size" do
       assert_not_nil build(:file_block).file_size
       assert_not_nil build(:image_block).file_size
@@ -90,7 +108,7 @@ module Cms
       target_section = create(:public_section)
       fb = create(:file_block, :parent => target_section)
 
-      assert_equal [fb], FileBlock.by_section(target_section).all
+      assert_equal [fb], FileBlock.by_section(target_section).to_a
     end
   end
 
@@ -136,6 +154,7 @@ module Cms
       @file_block.save!
       reset(:file_block)
 
+      assert_equal 1, @file_block.attachments.size, "Should still have an attachment after updating it."
       assert_equal "/new-path.txt", @file_block.attachments[0].data_file_path
     end
 

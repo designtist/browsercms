@@ -1,0 +1,12 @@
+<div class="modal-header">
+  <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+  <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+  <h3>Add Content</h3>
+</div>
+<div class="modal-body">
+  <%= render 'content' %>
+</div>
+<div class="modal-footer">
+  <%= link_to "Never Mind", "#", class: "btn btn-small", data: {dismiss: "modal", }, "aria-hidden" => "true" %>
+  <%= link_to "Reuse Content Instead?", cms.new_connector_path(:page_id => params[:connect_to_page_id], :container => params[:connect_to_container]) , class: "btn btn-small btn-primary", id: "insert_existing_content" %>
+</div>

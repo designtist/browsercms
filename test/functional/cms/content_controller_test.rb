@@ -23,7 +23,7 @@ module Cms
       get :show, :path => "foo"
       assert_response :not_found
       assert_select "title", "Page Not Found"
-      assert_select "h2", "There is no page at /foo"
+      assert_select "p", "There is no page at /foo"
     end
 
     def test_show_protected_page_to_privileged_user
@@ -33,7 +33,7 @@ module Cms
 
       get :show, :path => "secret"
       assert_response :success
-      assert_select "title", "Shhh... It's a Secret"
+      assert_select "title", "Shhh... It is a Secret"
     end
 
     def test_show_archived_page_to_user
@@ -70,18 +70,6 @@ module Cms
       assert_select "h3", "TEST"
     end
 
-    def test_show_draft_page_with_content_as_editor
-      login_as_cms_admin
-      create_page_with_content
-
-      @block.update_attributes(:content => "<h3>I've been edited</h3>")
-      reset(:page, :block)
-
-      get :show, :path => "page_with_content"
-      assert_response :success
-      assert_select "h3", "I've been edited"
-    end
-
     def test_is_file
       assert_is_file(true, "/system/file.pdf")
       assert_is_file(true, "/system/file.txt")
@@ -110,7 +98,7 @@ module Cms
       @page = create(:page,
                       :section => @protected_section,
                       :path => "/secret",
-                      :name => "Shhh... It's a Secret",
+                      :name => "Shhh... It is a Secret",
                       :template_file_name => "default.html.erb",
                       :publish_on_save => true)
     end
@@ -227,7 +215,6 @@ module Cms
 
       assert_response :success
       assert_select "title", "Test Page"
-      assert_select "iframe"
     end
 
   end
@@ -301,7 +288,6 @@ module Cms
 
       assert_response :success
       assert_select "title", "Test Page"
-      assert_select "iframe"
     end
 
     def test_cms_user_views_page_on_cms_site
@@ -313,20 +299,6 @@ module Cms
 
       assert_response :success
       assert_select "title", "Test Page"
-      assert_select "iframe"
-    end
-
-    test "When portlets throw a generic error, the page should still render the other content." do
-      @page = create(:page, :section => root_section, :path => "/about", :name => "Test About", :template_file_name => "default.html.erb", :publish_on_save => true)
-      @portlet_render = DynamicPortlet.create!(:name => "Test", :connect_to_page_id => @page.id, :connect_to_container => "main", :template => '<p id="hi">hello</p>')
-      @portlet_raise_generic = DynamicPortlet.create!(:name => "Test", :connect_to_page_id => @page.id, :connect_to_container => "main", :code => 'raise')
-      reset(:page)
-
-      get :show, :path => "about"
-
-
-      assert_select "#hi", "hello"
-
     end
   end
 end

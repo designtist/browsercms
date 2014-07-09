@@ -1,42 +1,35 @@
 module Cms
-class PortletsController < Cms::ContentBlockController
-  
-  protected
-    def load_blocks
-      @blocks = Portlet.search(params[:search]).paginate(
-        :page => params[:page],
-        :order => params[:order] || "name",
-        :conditions => ["deleted = ?", false]
-      )
+  class PortletsController < Cms::ContentBlockController
+
+    before_action :apply_blacklist, only: [:new, :create]
+
+    protected
+
+    # Ensure we can't create portlets on the blacklist of types.
+    # Existing instances can be edited/deleted.
+    def apply_blacklist
+       if params[:type] && Cms::Portlet.blacklisted?(params[:type].to_sym)
+         render status: :method_not_allowed
+       end
     end
-  
+
     def build_block
       if params[:type].blank?
         @block = model_class.new
       else
-        @block = params[:type].classify.constantize.new(params[params[:type]])
+        @block = params[:type].classify.constantize.new(params[:portlet])
       end
+
     end
-    
+
     def update_block
       load_block
-      @block.update_attributes(params[@block.class.name.underscore])
-    end    
-    
+      @block.update(params[:portlet])
+    end
+
     def block_form
       "portlets/portlets/form"
     end
-    
-    def new_block_path(block)
-      new_portlet_path
-    end
-  
-    def block_path(block, action=nil)
-      send("#{action ? "#{action}_" : ""}portlet_path", block)
-    end
 
-    def blocks_path
-      portlets_path
-    end
-end
+  end
 end

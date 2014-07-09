@@ -1,13 +1,17 @@
 module Cms
   class CategoryType < ActiveRecord::Base
-    attr_accessible :name
 
     has_many :categories, :class_name => 'Cms::Category'
     validates_presence_of :name
     validates_uniqueness_of :name
     is_searchable
+    has_content_type :module => :categorization
 
-    scope :named, lambda { |name| {:conditions => ["#{table_name}.name = ?", name]} }
+    include Concerns::IgnoresPublishing
+
+    def self.named(name)
+      where(name: name)
+    end
 
     # Return a map when the key is category type id as a string
     # and the value is an array of arrays, each entry having
@@ -25,9 +29,9 @@ module Cms
       list = []
       fn = lambda do |cat|
         list << cat
-        cat.children.all(:order => order).each { |c| fn.call(c) }
+        cat.children.order(order).each { |c| fn.call(c) }
       end
-      categories.top_level.all(:order => order).each { |cat| fn.call(cat) }
+      categories.top_level.order(order).each { |cat| fn.call(cat) }
       list
     end
 

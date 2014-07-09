@@ -4,7 +4,7 @@ Then /^a rails application named "([^"]*)" should exist$/ do |app_name|
   self.project_name = app_name
   check_directory_presence [project_name], true
   expect_project_directories %w{ app config db }
-  expect_project_files %w{script/rails Gemfile }
+  expect_project_files %w{bin/rails Gemfile }
 end
 
 Given /^a rails application named "([^"]*)" exists$/ do |name|
@@ -17,15 +17,17 @@ When /^I create a new BrowserCMS project named "([^"]*)"$/ do |name|
   cmd = "bcms new #{project_name} --skip-bundle"
   run_simple(unescape(cmd), false)
 end
+
 When /^I create a module named "([^"]*)"$/ do |name|
   self.project_name = name
   cmd = "bcms module #{project_name} --skip-bundle"
   run_simple(unescape(cmd), false)
 end
+
 Then /^a rails engine named "([^"]*)" should exist$/ do |engine_name|
   check_directory_presence [engine_name], true
   expect_project_directories %w{ app config lib }
-  expect_project_files ["script/rails", "Gemfile", "#{engine_name}.gemspec"]
+  expect_project_files ["bin/rails", "Gemfile", "#{engine_name}.gemspec"]
 end
 
 When /^BrowserCMS should be added the \.gemspec file$/ do
@@ -35,7 +37,6 @@ end
 Then /^BrowserCMS should be installed in the project$/ do
   assert_matching_output("BrowserCMS has been installed", all_output)
   # This is a not a really complete check but it at least verifies the generator completes.
-  check_file_content('config/initializers/browsercms.rb', 'Cms.table_prefix = "cms_"', true)
   check_file_content('config/routes.rb', 'mount_browsercms', true)
   verify_seed_data_requires_browsercms_seeds
 end
@@ -110,8 +111,15 @@ When /^it should seed the demo data$/ do
   # This output is ugly, but it verifies that seed data completely runs
 end
 
-When /^the file "([^"]*)" (#{SHOULD_OR_NOT}) contain:$/ do |file, should_or_not, partial_content|
-  check_file_content(file, partial_content, should_or_not)
+Then /^the file "([^"]*)" should contain the following content:$/ do |file, table|
+  table.rows.each do |row|
+    check_file_content(file, row[0], true)
+  end
+end
+
+# Opposite of aruba step 'the file "x" should contain:'
+When /^the file "([^"]*)" should not contain:$/ do |file, partial_content|
+  check_file_content(file, partial_content, false)
 end
 
 When /^the correct version of Rails should be added to the Gemfile$/ do
@@ -145,9 +153,7 @@ When /^it should copy all the migrations into the project$/ do
       "rake  cms:install:migrations",
       "Copied migration",
       "browsercms300.cms.rb from cms",
-      "browsercms305.cms.rb from cms",
-      "browsercms330.cms.rb from cms",
-      "browsercms340.cms.rb from cms"
+      "browsercms400.cms.rb from cms",
   ]
   expected_outputs.each do |expect|
     assert_matching_output expect, all_output
@@ -182,7 +188,7 @@ RUBY
   content = <<RUBY
   class Create#{block_name.capitalize}s < ActiveRecord::Migration
     def change
-      create_content_table :#{block_name}s, :prefix=>false do |t|
+      create_content_table :#{block_name}s do |t|
         t.timestamps
       end
       #{been_migrated_line}
@@ -190,12 +196,6 @@ RUBY
   end
 RUBY
   write_file "db/migrate/001_create_#{block_name}s.rb", content
-end
-
-Then /^I should have a migration for updating the "([^"]*)" versions table$/ do |block_name|
-  migration = find_migration_with_name "update_version_id_columns.rb"
-  check_file_content migration, "models = %w{#{block_name}}", true
-  check_file_content migration, "require 'cms/upgrades/v3_4_0'", true
 end
 
 When /^the project has a "([^"]*)" model$/ do |model_name|

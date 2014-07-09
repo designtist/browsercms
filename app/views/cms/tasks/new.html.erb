@@ -1,36 +1,22 @@
-<%= content_for :html_head do %>
-  <%= stylesheet_link_tag 'cms/form_layout' %>
+<% use_page_title "Assign Task" %>
+<% content_for :buttons, 'save_buttons' %>
+<% content_for :sidebar do %>
+    <div class="sidebar-block">
+      <h4 class="gray">Assigning Page:</h4>
+      <p><%= link_to @page.name, page_path(@page), target: '_blank' %></p>
+    </div>
 <% end %>
+<%= simple_form_for(@task, :url => @task.new_record? ? page_tasks_path(@page) : page_task_path(@page, @task)) do |f| %>
+    <%= render layout: 'form_with_buttons', locals: {f: f} do %>
+        <%= f.association :assigned_to,
+                          label: "Assign To",
+                          collection: Cms::User.active.able_to_edit_or_publish_content.order("first_name, last_name, login"),
+                          include_blank: false,
+                          label_method: :full_name_with_login
+        %>
+        <%= f.input :due_date, as: :date_picker, hint: "Leave blank for no due date" %>
+        <%= f.input :comment %>
 
-<% page_title "Assign Page '#{@page.name}'" %>
-<%= content_for :functions do %>
-  <h1><%=h @page_title %></h1>
-  <%= link_to(span_tag("Back To Page"), @page.path, :class => "button") %>
-  <br clear="all"/>
-<% end %>
-
-<%= form_for(@task, :url => @task.new_record? ? page_tasks_path(@page) : page_task_path(@page, @task)) do |f| %>
-
-  <%= f.cms_error_messages %>
-  <div class="fields text_fields">
-    <%= f.label :assigned_to_id, "Assign To" %>
-    <%= f.collection_select :assigned_to_id, Cms::User.active.able_to_edit_or_publish_content.all(:order => "first_name, last_name, login"), :id, :full_name_with_login, :include_blank => true, :tabindex => next_tabindex %>
-  </div>
-  
-  <div class="fields text_fields">
-      <%= f.label :due_date %>
-      <%= f.date_picker :due_date %>
-      <div class="instructions">Leave blank for no due date</div><br clear="all" />
-  </div>  
-  
-  <div class="fields text_editor_fields">
-    <%= f.label :comment %>
-    <br/>
-    <%= f.text_area :comment, :tabindex => next_tabindex %>
-  </div>
-
-  <div class="buttons">
-    <%= lt_button_wrapper(f.submit("Save", :class => "submit", :tabindex => next_tabindex)) %>
-  </div>
+    <% end %>
 <% end %>
 

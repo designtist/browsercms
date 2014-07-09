@@ -17,15 +17,8 @@ module Cms
 
     def self.display_name(file_name)
       name, format, handler = file_name.split('.')
-      "#{name.titleize} (#{format}/#{handler})"
-    end
-
-    def self.resource_collection_name
-      "page_template"
-    end
-
-    def self.path_elements
-      [Cms::PageTemplate]
+      content_type = handler ? "#{format}/#{handler}" : "#{format}"
+      "#{name.titleize} (#{content_type})"
     end
 
     # This is a combination of file system page templates
@@ -36,5 +29,17 @@ module Cms
       page_templates.map { |f| [display_name(f), f] }.sort.uniq
     end
 
+    def partial?
+      false
+    end
+
+    def placeholder
+      "subpage"
+    end
+
+    # Generates hint for editing
+    def hint
+      "No spaces allowed. Must start with lowercase letter."
+    end
   end
 end

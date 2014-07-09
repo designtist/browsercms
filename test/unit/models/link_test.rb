@@ -19,7 +19,7 @@ class LinkTest < ActiveSupport::TestCase
 
   test "#update increments the latest_version" do
     @link.name = "New"
-    @link.save!
+    @link.save_draft
     @link.reload
 
     assert_equal 1, @link.version
@@ -33,7 +33,7 @@ class LinkTest < ActiveSupport::TestCase
   end
 
   test "updating makes it not live" do
-    @link.update_attributes(:name => "New")
+    @link.update(:name => "New", :publish_on_save => false)
     @link.reload
     refute @link.live?
 
@@ -50,3 +50,28 @@ class LinkTest < ActiveSupport::TestCase
     assert v1.live?
   end
 end
+
+class LinkAccessiblityTest < ActiveSupport::TestCase
+
+    def public_sections
+      [public_section]
+    end
+
+    def public_section
+      @public_section ||= create(:public_section)
+    end
+
+    def protected_section
+      @protected_section ||= create(:protected_section)
+    end
+
+    test "accessible_to_guests?" do
+      public_link = create(:link, parent: public_section)
+      assert public_link.accessible_to_guests?(public_sections, public_section)
+    end
+
+    test "pages in restricted sections are not accessible_to_guests?" do
+      protected_link = create(:link, parent: protected_section)
+      refute protected_link.accessible_to_guests?(public_sections, protected_section)
+    end
+  end

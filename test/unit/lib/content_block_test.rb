@@ -2,7 +2,25 @@ require 'test_helper'
 
 class ContentBlockTest < ActiveSupport::TestCase
   def setup
-    @block = create(:html_block, :name => "Test")
+    @block = create(:html_block, :name => "Test", :publish_on_save => false)
+  end
+
+  test ".content_module" do
+    assert_equal :core, Cms::HtmlBlock.content_module
+  end
+  test "#save returns false if validation fails" do
+    invalid_content = Cms::HtmlBlock.new
+    refute invalid_content.save
+    refute invalid_content.valid?
+  end
+
+  test "#update_attributes returns false if validation fails" do
+    valid = create(:html_block)
+    refute valid.update_attributes(name: nil)
+  end
+
+  test "portlet" do
+    assert_equal :core, Cms::Portlet.content_module
   end
 
   def test_publishing
@@ -17,8 +35,8 @@ class ContentBlockTest < ActiveSupport::TestCase
 
     assert @block.published?
 
-    assert @block.update_attributes(:name => "Whatever")
-    
+    assert @block.update_attributes(:name => "Whatever", :publish_on_save => false)
+
 
     assert !@block.live?
 
@@ -38,7 +56,7 @@ class ContentBlockTest < ActiveSupport::TestCase
     assert_equal 1, @block.version, "Block should keep itself at version 1"
     assert_equal 1, @block.versions.size, "Should only have the one original version of the block"
     assert_equal 'Created', @block.draft.version_comment
-    assert result , "Update with same attributes should still return true" 
+    assert result, "Update with same attributes should still return true"
   end
 
   def test_custom_revision_comment
@@ -46,7 +64,7 @@ class ContentBlockTest < ActiveSupport::TestCase
     assert_equal "Something Changed", @block.draft.version_comment
   end
 
-  
+
 end
 
 class SoftPublishingTest < ActiveSupport::TestCase
@@ -57,7 +75,7 @@ class SoftPublishingTest < ActiveSupport::TestCase
 
   test "deleted? should return true for deleted records, false otherwise" do
     assert_equal false, @block.deleted?
-    @block.destroy  
+    @block.destroy
     assert_equal true, @block.deleted?
   end
 
@@ -92,7 +110,9 @@ class SoftPublishingTest < ActiveSupport::TestCase
 
   test "find with deleted returns all records even marked as deleted" do
     @block.destroy
-    assert_not_nil Cms::HtmlBlock.find_with_deleted(@block.id)
+    deleted_block = Cms::HtmlBlock.find_with_deleted(id: @block.id)
+    assert_not_nil deleted_block
+    assert_equal @block.name, deleted_block.name
   end
 
   test "Marking as deleted should create a new record in the versions table" do
@@ -103,7 +123,7 @@ class SoftPublishingTest < ActiveSupport::TestCase
     assert_equal 2, deleted_block.versions.size
     assert_equal 2, deleted_block.version
     assert_equal 1, deleted_block.versions.first.version
-    assert_equal 2, Cms::HtmlBlock::Version.count(:conditions => {:original_record_id => @block.id})
+    assert_equal 2, Cms::HtmlBlock::Version.where(:original_record_id => @block.id).count
   end
 
   test "Count should exclude deleted records" do
@@ -140,7 +160,7 @@ class VersionedContentBlockTest < ActiveSupport::TestCase
   end
 
   test "Getting a block as of a particular version shouldn't be considered a 'new record'." do
-    @block.update_attributes(:name=>"Changed", :publish_on_save=>true)
+    @block.update_attributes(:name => "Changed", :publish_on_save => true)
     @block.reload
 
     @v1 = @block.as_of_version(1)
@@ -148,12 +168,12 @@ class VersionedContentBlockTest < ActiveSupport::TestCase
 
   end
 
-  test 'Calling publish_on_save should not be sufficent to publish the block'do
+  test 'Calling publish_on_save should not be sufficent to publish the block' do
     @block.publish_on_save = true
     @block.save
 
     found = Cms::HtmlBlock.find(@block)
-    assert_equal 1, found.version 
+    assert_equal 1, found.version
   end
 
   test "Setting the 'publish' flag on a block, along with any other change, and saving it should mark that block as published." do
@@ -167,7 +187,7 @@ class VersionedContentBlockTest < ActiveSupport::TestCase
 
   def test_edit
     old_name = "Versioned Content Block"
-    new_name  = "New version of content block"
+    new_name = "New version of content block"
     @block.publish!
     @block.reload
     assert_equal @block.draft.name, old_name
@@ -183,7 +203,7 @@ class VersionedContentBlockTest < ActiveSupport::TestCase
 
   def test_revert
     old_name = "Versioned Content Block"
-    new_name  = "New version of content block"
+    new_name = "New version of content block"
     @block.publish!
     @block.reload
     assert_equal @block.draft.name, old_name
@@ -201,34 +221,47 @@ end
 
 class VersionedContentBlockConnectedToAPageTest < ActiveSupport::TestCase
   def setup
-    @page = create(:page, :section => root_section)
+    @page = create(:page, :section => root_section, :publish_on_save => false)
     @block = create(:html_block, :name => "Versioned Content Block")
     @page.create_connector(@block, "main")
     reset(:page, :block)
+
+
+  end
+
+  test "Adding a block to page" do
+    refute @page.published?, "The page should not be published yet."
+    assert_equal 2, @page.versions.size, "Should be two versions of the page"
+    pages = Cms::Page.connected_to(:connectable => @block, :version => @block.version).to_a
+    assert_equal [@page], pages, "The block should be connected to page"
+  end
+
+
+  test "updating block should not skip_callbacks" do
+    assert @block.update_attributes(:name => "something different", :publish_on_save => false)
+    assert_equal false, @block.skip_callbacks
+  end
+
+  test "updating block should put page into draft mode" do
+    @block.update_attributes(:name => "something different", :publish_on_save => false)
+    reset(:page)
+    refute @page.published?, "Updating a block should put any connected pages into draft mode"
   end
 
   def test_editing_connected_to_an_unpublished_page
     page_version_count = Cms::Page::Version.count
-    assert_equal 2, @page.versions.size, "Should be two versions of the page"
-    assert !@page.published?, "The page should not be published yet."
 
-    pages = Cms::Page.connected_to(:connectable => @block, :version => @block.version).all
-    assert_equal [@page], pages, "The block should be connected to page"
-
-
-    assert @block.update_attributes(:name => "something different")
-    assert_equal false, @block.skip_callbacks
+    assert @block.update_attributes(:name => "something different", :publish_on_save => false)
     assert_equal 2, @block.versions.size, "should be two versions of this block"
     reset(:page)
 
 
-    assert !@page.published?
     assert_equal 3, @page.versions.size, "Should be three versions of the page."
     assert_equal 3, @page.draft.version, "Draft version of page should be updated to v3 since its connected to the updated block."
     assert_incremented page_version_count, Cms::Page::Version.count
     assert_match /^HtmlBlock #\d+ was Edited/, @page.draft.version_comment
 
-    conns = @block.connectors.all(:order => 'id')
+    conns = @block.connectors.order('id')
     assert_equal 2, conns.size
     assert_properties conns[0], :page => @page, :page_version => 2, :connectable => @block, :connectable_version => 1, :container => "main"
     assert_properties conns[1], :page => @page, :page_version => 3, :connectable => @block, :connectable_version => 2, :container => "main"
@@ -266,11 +299,14 @@ end
 
 class NonVersionedContentBlockConnectedToAPageTest < ActiveSupport::TestCase
   def setup
-    @page = create(:page, :section => root_section)
+    @page = create(:page, :section => root_section, :publish_on_save => false)
     @block = create(:non_versioned_block, :name => "Non-Versioned Non-Publishable Content Block")
     @page.create_connector(@block, "main")
     reset(:page, :block)
   end
+
+
+
 
   def test_editing_connected_to_an_unpublished_page
     page_version_count = Cms::Page::Version.count
@@ -281,11 +317,11 @@ class NonVersionedContentBlockConnectedToAPageTest < ActiveSupport::TestCase
     assert @block.update_attributes(:name => "something different")
     reset(:page)
 
-    assert 2, @page.version
+    assert_equal 1, @page.version
     assert_equal page_version_count, Cms::Page::Version.count
     assert !@page.published?
 
-    conns = Cms::Connector.for_connectable(@block).all(:order => 'id')
+    conns = Cms::Connector.for_connectable(@block).order('id')
     assert_equal 1, conns.size
     assert_properties conns[0], :page => @page, :page_version => 2, :connectable => @block, :connectable_version => nil, :container => "main"
   end

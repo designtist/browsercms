@@ -1,5 +1,7 @@
 module Cms
   class ContentController < Cms::ApplicationController
+    respond_to :html
+
     include Cms::ContentRenderingSupport
     include Cms::Attachments::Serving
 
@@ -12,19 +14,42 @@ module Cms
     before_filter :construct_path_from_route, :only => [:show_page_route]
     before_filter :try_to_redirect, :only => [:show]
     before_filter :try_to_stream_file, :only => [:show]
-    before_filter :check_access_to_page, :only => [:show, :show_page_route]
+    before_filter :load_page, :only => [:show, :show_page_route]
+    before_filter :check_access_to_page, :except => [:edit, :preview]
     before_filter :select_cache_directory
 
+    self.responder = Cms::ContentResponder
 
     # ----- Actions --------------------------------------------------------------
     def show
-      render_page_with_caching
+      if @show_toolbar
+        render_editing_frame
+      else
+        render_page
+      end
+      cache_if_eligible
     end
 
     def show_page_route
-      render_page_with_caching
+      @_page_route.execute(self) if @_page_route
+      render_page
+      cache_if_eligible
     end
 
+    # Used in the iframe to display a page that's being editted.
+    def edit
+      @show_toolbar = true
+      @mode = "edit"
+      @page = Page.find_draft(params[:id].to_i)
+      render_page
+    end
+
+    def preview
+      @mode = "view"
+      @page = Page.find_draft(params[:id].to_i)
+      ensure_current_user_can_view(@page)
+      render_page
+    end
 
     # Used by the rendering behavior
     def instance_variables_for_rendering
@@ -40,25 +65,38 @@ module Cms
 
     private
 
-    # This is the method all actions delegate to
-    # check_access_to_page will also call this directly
-    # if caching is not enabled
-    def render_page
-      logger.warn "Render page (id: #{@page.id})"
-      @_page_route.execute(self) if @_page_route
-      prepare_connectables_for_render
-      page_layout = determine_page_layout
-      render :layout => page_layout, :action => 'show'
+    def render_editing_frame
+      @page_title = @page.page_title
+
+      # Adds all provided parameters to the iframe
+      @edit_page_path = ActionDispatch::Http::URL.url_for(path: edit_content_path(current_page), params: params.except(:controller, :action, :path), only_path: true)
+      render 'editing_frame', :layout => 'cms/page_editor'
     end
 
-    def render_page_with_caching
-      render_page
-      cache_page if should_write_to_page_cache?
+    def render_page
+      prepare_connectables_for_render
+      prepend_view_path DynamicView.resolver
+      respond_with @page, determine_page_layout
+    end
+
+    def cache_if_eligible
+      cache_page if should_cache_page?
+    end
+
+    # Determine if this page is eligible for caching or not.
+    def should_cache_page?
+      should_cache = (using_cms_subdomains? && !logged_in? && @page.cacheable? && params[:cms_cache] != "false")
+      if should_cache
+        msg = "'#{request.path}' being written to cache."
+      else
+        msg = "'#{request.path}' not eligible for caching."
+      end
+      logger.info msg
+      should_cache
     end
 
     # ----- Before Filters -------------------------------------------------------
     def construct_path
-      # @paths = params[:cms_page_path] || params[:path] || []
       @path = "/#{params[:path]}"
       @paths = @path.split("/")
     end
@@ -118,55 +156,18 @@ module Cms
 
     end
 
-    def check_access_to_page
-      set_page_mode
+    def load_page
       if current_user.able_to?(:edit_content, :publish_content, :administrate)
         logger.debug "Displaying draft version of page"
-        if page = Page.first(:conditions => {:path => @path})
-          @page = page.as_of_draft_version
-        else
-          return render(:layout => 'cms/application',
-                        :template => 'cms/content/no_page',
-                        :status => :not_found)
-        end
+        @page = Page.find_draft(@path)
       else
         logger.debug "Displaying live version of page"
-        @page = Page.find_live_by_path(@path)
-        page_not_found unless (@page && !@page.archived?)
+        @page = Page.find_live(@path)
       end
-
-      unless current_user.able_to_view?(@page)
-        store_location
-        raise Cms::Errors::AccessDenied
-      end
-
-      # Doing this so if you are logged in, you never see the cached page
-      # We are calling render_page just like the show action does
-      # But since we do it from a before filter, the page doesn't get cached
-      if logged_in?
-        logger.info "Not Caching, user is logged in"
-        render_page
-      elsif !@page.cacheable?
-        logger.info "Not Caching, page cachable is false"
-        render_page
-      elsif params[:cms_cache] == "false"
-        logger.info "Not Caching, cms_cache is false"
-        render_page
-      end
-
     end
 
-    # ----- Other Methods --------------------------------------------------------
-
-    def page_not_found
-      raise ActiveRecord::RecordNotFound.new("No page at '#{@path}'")
+    def check_access_to_page
+      ensure_current_user_can_view(@page)
     end
-
-    def set_page_mode
-      @mode = @show_toolbar && current_user.able_to?(:edit_content) ? (params[:mode] || session[:page_mode] || "edit") : "view"
-      session[:page_mode] = @mode
-    end
-
-
   end
 end

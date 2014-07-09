@@ -2,18 +2,33 @@
 # There are other routes that will be added at the root of the site (i.e. /) which can
 #   be found in lib/cms/route_extensions.rb
 Cms::Engine.routes.draw do
-  match '/dashboard', :to=>"dashboard#index", :as=>'dashboard'
-  match '/', :to => 'home#index', :as=>'home'
-  match '/sitemap', :to=>"section_nodes#index", :as=>'sitemap'
-  match '/content_library', :to=>"html_blocks#index", :as=>'content_library'
-  match '/administration', :to=>"users#index", :as=>'administration'
-  match '/logout', :to=>"sessions#destroy", :as=>'logout'
-  get '/login', :to=>"sessions#new", :as=>'login'
-  post '/login', :to=>"sessions#create"
+  get 'fakemap', to: 'section_nodes#fake'
+  get '/content/:id/edit', :to => "content#edit", :as => 'edit_content'
+  get '/dashboard', :to => "dashboard#index", :as => 'dashboard'
+  get '/', :to => 'home#index', :as => 'home'
+  get '/sitemap', :to => "section_nodes#index", :as => 'sitemap'
+  get '/content_library', :to => "html_blocks#index", :as => 'content_library'
+  get '/administration', :to => "users#index", :as => 'administration'
 
-  match '/toolbar', :to=>"toolbar#index", :as=>'toolbar'
-  match '/content_types', :to=>"content_types#index", :as=>'content_types'
+  devise_for :cms_users,
+             skip: [:sessions],
+             path: :users,
+             class_name: 'Cms::PersistentUser',
+             controllers: {passwords: 'cms/passwords'},
+             module: :devise
 
+  devise_scope :cms_user do
+    get '/login' => "sessions#new", :as => 'login'
+    get '/login' => "sessions#new", :as => :new_cms_user_session
+    post '/login' => "sessions#create", :as => :cms_user_session
+    get '/logout' => "sessions#destroy", :as => 'logout'
+
+  end
+
+  get '/toolbar', :to => "toolbar#index", :as => 'toolbar'
+
+  put "/inline_content/:id", to: "inline_content#update", as: "update_inline_content"
+  resources :page_components
   resources :connectors do
     member do
       put :move_up
@@ -24,6 +39,11 @@ Cms::Engine.routes.draw do
   end
   resources :links
 
+  resources :content_types, only: [] do
+    collection do
+      post :index
+    end
+  end
   resources :pages do
     member do
       put :archive
@@ -36,8 +56,9 @@ Cms::Engine.routes.draw do
     end
     resources :tasks
   end
-  get '/pages/:id/version/:version', :to=>'pages#version', :as=>'version_cms_page'
-  put '/pages/:id/revert_to/:version', :to=>'pages#revert_to', :as=>'revert_page'
+  get '/pages/:id/preview', to: 'content#preview', as: 'preview_page'
+  get '/pages/:id/version/:version', :to => 'pages#version', :as => 'version_page'
+  put '/pages/:id/revert_to/:version', :to => 'pages#revert_to', :as => 'revert_page'
   resources :tasks do
     member do
       put :complete
@@ -52,20 +73,33 @@ Cms::Engine.routes.draw do
 
   resources :section_nodes do
     member do
-      put :move_before
-      put :move_after
-      put :move_to_beginning
-      put :move_to_end
-      put :move_to_root
+      put :move_to_position
     end
   end
 
-  resources :attachments, :only=>[:show, :create, :destroy]
+  resources :attachments, :only => [:show, :create, :destroy]
 
-  match '/content_library', :to=>'html_blocks#index', :as=>'content_library'
   content_blocks :html_blocks
+  content_blocks :forms
+  resources :form_fields do
+    member do
+      get :confirm_delete
+    end
+  end
+  post "form_fields/:id/insert_at/:position" => 'form_fields#insert_at'
+  get "/forms/:id/fields/preview" => 'form_fields#preview', as: 'preview_form_field'
+
+  resources :form_entries do
+    collection do
+      post :submit
+    end
+  end
+
+  # Faux nested resource for forms (not sure if #content_blocks allows for it.)
+  get 'forms/:id/entries' => 'form_entries#index', as: 'entries'
+
   content_blocks :portlets
-  post '/portlet/:id/:handler', :to=>"portlet#execute_handler", :as=>"portlet_handler"
+  post '/portlet/:id/:handler', :to => "portlet#execute_handler", :as => "portlet_handler"
 
   content_blocks :file_blocks
   content_blocks :image_blocks
@@ -73,12 +107,11 @@ Cms::Engine.routes.draw do
   content_blocks :categories
   content_blocks :tags
 
-  match '/administration', :to => 'users#index', :as=>'administration'
-
-  resources :users do
+  get 'user' => "user#show", as: :current_user
+  resources :users, except: :show do
     member do
       get :change_password
-      put :update_password
+      patch :update_password
       put :disable
       put :enable
     end
@@ -88,14 +121,15 @@ Cms::Engine.routes.draw do
   resources :redirects
   resources :page_partials, :controller => 'dynamic_views'
   resources :page_templates, :controller => 'dynamic_views'
-  resources :page_routes do
+  resources :page_routes, except: :show do
     resources :conditions, :controller => "page_route_conditions"
     resources :requirements, :controller => "page_route_requirements"
   end
-  get 'cache', :to=>'cache#show', :as=>'cache'
-  delete 'cache', :to=>'cache#destroy'
+  get 'cache', :to => 'cache#show', :as => 'cache'
+  delete 'cache', :to => 'cache#destroy'
 
-  match "/routes", :to => "routes#index", :as=>'routes'
+  get "/routes", :to => "routes#index", :as => 'routes'
 
+  add_routes_for_addressable_content_blocks
 end
 

@@ -2,6 +2,15 @@
 module Cms
   module ApplicationHelper
 
+    # Generate the proper link to Preview a Page or Addressable content block (based on type)
+    def preview_content_path(content)
+      if content.class == Cms::Page
+        cms.preview_page_path(content)
+      else
+        content.path
+      end
+    end
+
     # Help with deprecations messages
     # @deprecated
     def cms_handler_path(*args)
@@ -28,6 +37,19 @@ module Cms
                         :onchange => 'this.form.submit(); return false')
       text << javascript_tag("$('version').selectedIndex = 0") if page.live?
       text
+    end
+
+    # Generate HTML for draft icon for content that are in draft
+    # @param [Object] content
+    # @param [Object] options
+    # @option options [Boolean] :force (false) If we should force show :publish icon. In many cases, its the 'default' so it doesn't make sense to show.
+    # @return [String] HTML (HTML safe)
+    def draft_icon_tag(content, options={})
+      if content.respond_to?(:draft?) && content.draft?
+        '<span class="draft">Draft</span>'.html_safe
+      elsif options[:force]
+        '<span class="published">Published</span>'.html_safe
+      end
     end
 
     def action_icon_src(name)
@@ -60,11 +82,11 @@ module Cms
         html = <<HTML
 jQuery(function($) {
   $('a##{check_id}').click(function() {
-    $('#{selector}').attr('checked', true);
+    $('#{selector}').prop('checked', true);
   });
 
   $('a##{uncheck_id}').click(function() {
-    $('#{selector}').attr('checked', false);
+    $('#{selector}').prop('checked', false);
   });
 })
 HTML
@@ -110,21 +132,10 @@ HTML
       content_tag :span, content
     end
 
-    def lt_button_wrapper(content)
-      button = <<LBW
-  <div class="lt_button">
-    #{image_tag "cms/lt_button_l.gif"}
-    <div class="lt_button_content">
-      <span>#{ content }</span>
-    </div>
-    #{image_tag "cms/lt_button_r.gif", :style => "margin-right: 10px;"}
-  </div>
-LBW
-      button.html_safe
-    end
+
 
     def dk_button_wrapper(content)
-      lt_button_wrapper(content).gsub("lt_button_", "dk_button_")
+      (content).gsub("lt_button_", "dk_button_")
     end
 
     def group_ids
@@ -132,10 +143,19 @@ LBW
     end
 
     def group_filter
-      select_tag("group_id", options_from_collection_for_select(Group.all.insert(0, Group.new(:id => nil, :name => "Show All Groups")), "id", "name", params[:group_id].to_i))
+      select_tag("group_id",
+                 options_from_collection_for_select(Group.all.to_a.insert(0, Group.new(:id => nil, :name => "Show All Groups")),
+                                                    "id",
+                                                    "name",
+                                                    params[:group_id].to_i),
+                class: 'group_filter'
+      )
     end
 
-    # Fetches a list of categories for a cms_drop_down. Will prompt users to create Categories/Categories types if the proper ones don't exist.
+    # Fetches a list of categories for a cms_drop_down. Will prompt users to create Categories/Categories types if
+    # the proper ones don't exist.
+    #
+    # @deprecated Use <%= f.association :categories %> instead.
     def categories_for(category_type_name, order="name")
       cat_type = CategoryType.named(category_type_name).first
       categories = cat_type ? cat_type.category_list(order) : [Category.new(:name => "-- You must first create a 'Category Type' named '#{category_type_name}'")]
@@ -145,19 +165,20 @@ LBW
     # Generates the HTML to render a paging control, if there is more than one page to be shown.
     #
     # @param [Array] collection List of content to be shown
-    # @param [Cms::ContentType] content_type The content type of the collection (used to generate links to Previous/Next)
+    # @param [Cms::ContentType || Class] content_type The content type of the collection (used to generate links to Previous/Next)
     # @param [Hash] options
     def render_pagination(collection, content_type, options={})
       if collection.blank?
         content_tag(:div, "No Content", :class => "pagination")
       else
-        render :partial => "cms/shared/pagination", :locals => {
+        model_class = content_type.instance_of?(Class) ? content_type : content_type.model_class
+        render :partial => "pagination", :locals => {
             :collection => collection,
-            :first_page_path => cms_connectable_path(content_type, {:page => 1}.merge(options)),
-            :previous_page_path => cms_connectable_path(content_type, {:page => collection.previous_page ? collection.previous_page : 1}.merge(options)),
-            :current_page_path => cms_connectable_path(content_type, options),
-            :next_page_path => cms_connectable_path(content_type, {:page => collection.next_page ? collection.next_page : collection.current_page}.merge(options)),
-            :last_page_path => cms_connectable_path(content_type, {:page => collection.total_pages}.merge(options))
+            :first_page_path => polymorphic_path(engine_aware_path(model_class), {:page => 1}.merge(options)),
+            :previous_page_path => polymorphic_path(engine_aware_path(model_class), {:page => collection.previous_page ? collection.previous_page : 1}.merge(options)),
+            :current_page_path => polymorphic_path(engine_aware_path(model_class), options),
+            :next_page_path => polymorphic_path(engine_aware_path(model_class), {:page => collection.next_page ? collection.next_page : collection.current_page}.merge(options)),
+            :last_page_path => polymorphic_path(engine_aware_path(model_class), {:page => collection.total_pages}.merge(options))
         }
       end
     end
@@ -186,53 +207,38 @@ LBW
       end
     end
 
-    # Render a CMS styled 'X Delete' button. This button will appear on tool bars, typically set apart visually from other buttons.
-    # Has a 'confirm?' popup attached to it as well.
-    # Assumes that javascript code to handle the 'confirm' has already been included in the page.
-    #
-    # @param [Hash] options The options for this tag
-    # @option options [String or Boolean] :title Title for 'confirm' popup. If specified as 'true' or with a string value a standard 'confirm yes/no' window should be used. If true is specified, its assume that the javascript popup handles the title.
-    # @option options [Path] :path The path or URL to link_to. Takes same types at url_for or link_to. Defaults to '#' if not specified.
-    # @option options [Boolean] :enabled If false, the button will be marked disabled. Default to false.
-    def delete_button(options={})
-      classes = "button"
-      classes << " disabled" if !options[:enabled]
-      classes << " delete_button"
-      classes << " http_delete confirm_with_title" if options[:title]
-
-      link_to_path = options[:path] ? options[:path] : "#"
-
-      span_options = {:id => 'delete_button', :class => classes}
-      span_options[:title] = options[:title] if (!options[:title].blank? && options[:title].class == String)
-      link_to span_tag("<span class=\"delete_img\">&nbsp;</span>Delete".html_safe), link_to_path, span_options
-    end
-
     # Render a CMS styled 'Edit' button. This button will appear on tool bars, typically set apart visually from other buttons.
-    #
+    # @deprecated Use link_to
     # @param [Hash] options The options for this tag
     # @option options [Path] :path The path or URL to link_to. Takes same types at url_for or link_to. Defaults to '#' if not specified.
     # @option options [Boolean] :enabled If false, the button will be marked disabled. Default to false.
-    def edit_button(options={})
-      classes = "button"
+    def edit_button(options={bootstrap: false})
+
+      label = options[:bootstrap]? "Edit" : span_tag("&nbsp;Edit&nbsp;".html_safe)
+      classes = styles_for_button(options)
       classes << " disabled" if !options[:enabled]
 
       link_to_path = options[:path] ? options[:path] : "#"
       span_options = {:id => 'edit_button', :class => classes}
-      link_to span_tag("&nbsp;Edit&nbsp;".html_safe), link_to_path, span_options
+      link_to label, link_to_path, span_options
 
     end
 
     # Render a CMS styled 'Add' button. This button will appear on tool bars, typically set apart visually from other buttons.
     #
     # @param [Path] The path or URL to link_to. Takes same types at url_for or link_to.
-    def add_button(path, options={})
-      classes = "button"
+    def add_button(path, options={bootstrap: false})
+      classes = styles_for_button(options)
+      label = options[:bootstrap]? "Add" : span_tag("&nbsp;Add&nbsp;".html_safe)
       span_options = {:class => classes}
-      link_to span_tag("&nbsp;Add&nbsp;".html_safe), path, span_options
+      link_to label, path, span_options
     end
 
     private
 
+    def styles_for_button(options)
+      options[:bootstrap] ? "btn btn-primary pull-left": "button"
+    end
     # Converts a CSS jQuery selector into something that can be suitably used as a CSS id element.
     def to_id(selector, suffix=nil)
       id = selector.gsub(".", "_")

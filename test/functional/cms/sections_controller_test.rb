@@ -10,12 +10,6 @@ class SectionsControllerTest < ActionController::TestCase
     given_there_is_a_sitemap
   end
   
-  def test_edit
-    get :edit, :id => root_section.to_param
-    assert_response :success
-    assert_select "input[name=?][value=?]", "section[name]", root_section.name
-  end
-
   test "GET new should set the groups to the parent section's groups by default" do
     @group = create(:group, :name => "Test", :group_type => create(:group_type, :name => "CMS User", :cms_access => true))
     get :new, :section_id => root_section.to_param
@@ -29,14 +23,16 @@ class SectionsControllerTest < ActionController::TestCase
   def test_update
     @section = create(:section, :name => "V1", :parent => root_section, :groups => root_section.groups)
     
+
     put :update, :id => @section.to_param, :section => {:name => "V2"}
     reset(:section)
     
     assert_redirected_to @section
     assert_equal "V2", @section.name
     assert_equal "Section 'V2' was updated", flash[:notice]
-  end  
-  
+  end
+
+
 end
 
 class SectionsControllerPermissionsTest < ActionController::TestCase
@@ -93,10 +89,10 @@ class SectionsControllerPermissionsTest < ActionController::TestCase
   def test_create_permissions
     login_as(@user)
 
-    post :create, :section_id => @editable_section, :name => "Another editable subsection"
+    post :create, :section_id => @editable_section, section: {:name => "Another editable subsection"}
     assert_response :success
 
-    post :create, :section_id => @noneditable_section, :name => "Another non-editable subsection"
+    post :create, :section_id => @noneditable_section, section: {:name => "Another non-editable subsection"}
     assert_response 403
     assert_template "cms/shared/access_denied"
   end
@@ -115,10 +111,10 @@ class SectionsControllerPermissionsTest < ActionController::TestCase
   def test_update_permissions
     login_as(@user)
 
-    put :update, :id => @editable_section, :name => "Modified editable subsection"
+    put :update, :id => @editable_section, :name => "Modified editable subsection", section:{name: "Anything"}
     assert_response :redirect
 
-    put :update, :id => @noneditable_section, :name => "Modified non-editable subsection"
+    put :update, :id => @noneditable_section, :name => "Modified non-editable subsection" , section:{name: "Anything"}
     assert_response 403
     assert_template "cms/shared/access_denied"
   end
@@ -126,10 +122,10 @@ class SectionsControllerPermissionsTest < ActionController::TestCase
   def test_update_permissions_of_subsection
     login_as(@user)
 
-    put :update, :id => @editable_section, :name => "Modified editable subsection"
+    put :update, :id => @editable_section, :name => "Modified editable subsection", section:{name: "Anything"}
     assert_response :redirect
 
-    put :update, :id => @editable_subsection, :name => "Section below editable section"
+    put :update, :id => @editable_subsection, :name => "Section below editable section", section:{name: "Anything"}
     assert_response 403
     assert_template "cms/shared/access_denied"
   end
@@ -138,7 +134,7 @@ class SectionsControllerPermissionsTest < ActionController::TestCase
     @group2 = create(:group, :name => "Test", :group_type => create(:group_type, :name => "CMS User", :cms_access => true))
     expected_groups = @editable_section.groups
     login_as(@user)
-    put :update, :id => @editable_section
+    put :update, :id => @editable_section, section: {:name => "V2"}
     assert_response :redirect
     assert_equal expected_groups, assigns(:section).groups
     assert !assigns(:section).groups.include?(@group2)
@@ -163,7 +159,7 @@ class SectionsControllerPermissionsTest < ActionController::TestCase
     @group2 = create(:cms_user_group)
     expected_groups = [@group, @group2]
     login_as_cms_admin
-    put :update, :id => @editable_subsection, :cms_section => {:name => "new name", :group_ids => [@group.id, @group2.id]}
+    put :update, :id => @editable_subsection, :section => {:name => "new name", :group_ids => [@group.id, @group2.id]}
     assert_response :redirect
   end
 

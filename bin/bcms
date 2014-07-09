@@ -4,11 +4,12 @@ require 'rubygems'
 require 'thor'
 require 'term/ansicolor'
 require 'rails/generators/actions'
+require 'active_support/core_ext/array/extract_options'
 require 'active_support/core_ext/string/inflections'
 require 'cms/version'
 require 'cms/commands/actions'
-require 'cms/upgrades/v3_4_0'
-require 'cms/upgrades/v3_5_0'
+require 'cms/commands/to_version400'
+
 # This seems to be required only due to a bug in Thor documented here:
 #   https://rails.lighthouseapp.com/projects/8994/tickets/4692-error-when-creating-app-from-template-undefined-method-wrap-for-arrayclass
 # If this bug is fixed the following line can probably be removed.
@@ -24,8 +25,7 @@ class Cms::Install < Thor
   include Thor::Actions
   include Rails::Generators::Actions
   include Cms::Commands::Actions
-  include Cms::Upgrades::V3_4_0
-  include Cms::Upgrades::V3_5_0
+  include Cms::Commands::ToVersion400
 
   def self.common_options
     method_option :database, :aliases => "-d", :desc => "Preconfigure for selected database (options: mysql/oracle/postgresql/sqlite3/frontbase/ibm_db) [Default: sqlite3]"
@@ -70,7 +70,7 @@ class Cms::Install < Thor
     generate_browsercms_project
     generate_installation_script
     generate_default_template
-
+    generate_devise_configuration
     display_instructions(name)
   end
 
@@ -83,9 +83,7 @@ class Cms::Install < Thor
     comment_out_rails_in_gemfile
     run_bundle_update
     install_migrations
-    rake "rails:update" unless options[:skip_rails]
-    generate_rails_3_4_0_migration
-    upgrade_to_3_5_0
+    generate_devise_configuration
     install_cms_seed_data
 
     instructions = <<TEXT
@@ -108,7 +106,6 @@ TEXT
   option_skip_bundle
   def install
     common_setup('.')
-    prefix_cms_tables
     generate_default_template
     puts "BrowserCMS has been installed. Run rake db:install to add the tables then restart your server."
   end
@@ -120,12 +117,6 @@ TEXT
   end
 
   private
-
-  def prefix_cms_tables
-    append_to_file "config/initializers/browsercms.rb", <<-CODE
-Cms.table_prefix = "cms_"
-    CODE
-  end
 
   def create_license_files
     template 'COPYRIGHT.txt'
@@ -188,12 +179,18 @@ Cms.table_prefix = "cms_"
 
   def enable_asset_precompiling
     gsub_file "config/environments/production.rb", /config\.assets\.compile = false/, 'config.assets.compile = true'
+    gsub_file 'config/application.rb', /^(\s*)(config\.assets\.enabled = true)/, <<-RUBY
+\1\2
+
+\1# Don't require environment or DB during asset compilation
+\1config.assets.initialize_on_precompile = false
+    RUBY
   end
 
   def configure_mail_server
     [
         "# Configure your mail server's address below",
-        "config.action_mailer.smtp_settings = {:address => 'mail.yourmailserver.com', :domain => config.cms.site_domain}}\n"
+        "config.action_mailer.smtp_settings = {:address => 'mail.yourmailserver.com', :domain => config.cms.site_domain}\n"
     ].reverse.each do |line|
       environment line, :env => "production"
     end
@@ -267,6 +264,7 @@ Cms.table_prefix = "cms_"
     run_bundle_install
     generate :jdbc if defined?(JRUBY_VERSION)
     generate_browsercms_project
+    generate_devise_configuration
   end
 
   def generate_default_template
@@ -295,7 +293,6 @@ Cms.table_prefix = "cms_"
     common_setup name
     create_browsercms_initializer
     generate_default_template
-
   end
 
   def create_browsercms_initializer

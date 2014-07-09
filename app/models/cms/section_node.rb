@@ -1,8 +1,9 @@
 require 'ancestry'
 
 class Cms::SectionNode < ActiveRecord::Base
-  attr_accessible :node, :section, :parent, :node_id, :node_type
   has_ancestry
+
+  validates :slug, uniqueness: { scope: :node_type }, unless: lambda { |sn| sn.slug.blank?}
 
   # This is the parent section for this node
   # For backwards compatiblity
@@ -26,9 +27,31 @@ class Cms::SectionNode < ActiveRecord::Base
     ancestry ? "ancestry = '#{ancestry}'" : 'ancestry IS NULL'
   end
 
-  scope :of_type, lambda{|types| {:conditions => ["#{table_name}.node_type IN (?)", types]}}
-  scope :in_order, :order => "position asc"
-  scope :fetch_nodes, :include => :node
+
+  class << self
+    def of_type(types)
+      where(["#{table_name}.node_type IN (?)", types])
+    end
+
+    def in_order
+      order("position asc")
+    end
+
+    def fetch_nodes
+      includes(:node)
+    end
+  end
+
+  # Return all section nodes which are not of the given type (i.e. class name)
+  # @param [String] klass A specific class name that should be excluded.
+  def self.not_of_type(klass)
+    where("#{table_name}.node_type NOT IN (?)", klass)
+  end
+
+  # Determines if this node is the homepage of the site.
+  def home?
+    page? && node.home?
+  end
 
   def visible?
     return false unless node
@@ -52,6 +75,18 @@ class Cms::SectionNode < ActiveRecord::Base
     node_type == 'Cms::Page'
   end
 
+  def link?
+    node_type == 'Cms::Link'
+  end
+  
+  def deletable?
+    return false if self.root?
+    if node.respond_to?(:deletable?)
+      return node.deletable?
+    end
+    true
+  end
+
   # @param [Section] section
   # @param [Integer] position
   def move_to(section, position)
@@ -68,7 +103,7 @@ class Cms::SectionNode < ActiveRecord::Base
         #This helps prevent the position from getting out of whack
         #If you pass in a really high number for position, 
         #this just corrects it to the right number
-        node_count =Cms::SectionNode.count(:conditions => {:ancestry => ancestry})
+        node_count = Cms::SectionNode.where({:ancestry => ancestry}).count
         position = node_count if position > node_count
       end
       

@@ -17,18 +17,18 @@ module Cms
         def uses_soft_delete(options={})
           @uses_soft_delete = true
 
-          scope :not_deleted, :conditions => ["#{table_name}.deleted = ?", false]
+          scope :not_deleted, -> {where (["#{table_name}.deleted = ?", false])}
           class << self
             alias_method :delete_all!, :delete_all
           end
 
           extend ClassMethods
           include InstanceMethods
-          attr_accessible :deleted
+         #attr_accessible :deleted
 
           # By default, all queries for blocks should filter out deleted rows.
           begin
-            default_scope where(:deleted => false)
+            default_scope {where(:deleted => false)}
           # This may fail during gem loading, if no DB or the table does not exist. Log it and move on.
           rescue StandardError => e
             handle_missing_table_error_during_startup("Can't set a default_scope for soft_deleting", e)
@@ -43,13 +43,10 @@ module Cms
       # See http://github.com/fernandoluizao/acts_as_active for an implementation of this
       module ClassMethods
 
-        # Returns all records, including those which are marked as deleted.
-        #
-        # Basically 'find' exactly how ActiveRecord originally implements it.
-        #
-        # @param args Same params as ActiveRecord.find
-        def find_with_deleted(* args)
-          self.with_exclusive_scope { find(* args) }
+        # Returns a content block even if it is marked as deleted.
+        # @param [Hash] options Hash suitable to be passed to '#where'
+        def find_with_deleted(options)
+          self.unscoped.where(options).first
         end
 
         # Returns a count of all records of this type, including those marked as deleted.
@@ -58,20 +55,20 @@ module Cms
         #
         # @param args Same params as ActiveRecord.count
         def count_with_deleted(* args)
-          self.with_exclusive_scope { count(* args) }
+          self.unscoped.count(* args)
         end
 
         def delete_all(conditions=nil)
-          update_all(["deleted = ?", true], conditions)
+          where(conditions).update_all(["deleted = ?", true])
         end
 
         def exists?(id_or_conditions)
-          if id_or_conditions.is_a?(Hash) || id_or_conditions.is_a?(Array)
-            conditions = {:conditions => id_or_conditions}
+          query = if id_or_conditions.is_a?(Hash) || id_or_conditions.is_a?(Array)
+            where id_or_conditions
           else
-            conditions = {:conditions => {:id => id_or_conditions}}
+            where(:id => id_or_conditions)
           end
-          count(conditions) > 0
+          query.count > 0
         end
       end
       module InstanceMethods

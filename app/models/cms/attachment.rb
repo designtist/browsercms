@@ -11,8 +11,6 @@ module Cms
     cattr_accessor :definitions, :instance_writer => false
     @@definitions = {}.with_indifferent_access
     cattr_reader :configuration
-    attr_accessor :attachable_class
-    attr_accessible :attachable_class
 
     before_validation :set_cardinality
     before_save :set_section, :sanitized_file_path_and_name
@@ -20,28 +18,20 @@ module Cms
 
     belongs_to :attachable, :polymorphic => true
 
-    include DefaultAccessible
-    attr_accessible :data, :attachable, :attachment_name
+    extend DefaultAccessible
 
     validates :attachment_name, :attachable_type, :presence => true
 
-    include Cms::Addressable
-    include Cms::Addressable::DeprecatedPageAccessors
-    has_one :section_node, :as => :node, :class_name => 'Cms::SectionNode'
-    alias :node :section_node
+    is_addressable
+    include Cms::Concerns::Addressable::DeprecatedPageAccessors
 
     is_archivable; is_publishable; uses_soft_delete; is_userstamped; is_versioned
 
-    #TODO change this to a simple method
-    #def named(mid)
-    # find_all_by_name mid
-    # end
-    # ...or even get rid of it
     scope :named, lambda { |name|
       {:conditions => {:attachment_name => name.to_s}}
     }
 
-    scope :multiple, :conditions => {:cardinality => MULTIPLE}
+    scope :multiple, -> {where(:cardinality => MULTIPLE)}
 
     FILE_BLOCKS = "Cms::AbstractFileBlock"
     validates_presence_of :data_file_path, :if => Proc.new { |a| a.attachable_type == FILE_BLOCKS }
@@ -49,6 +39,9 @@ module Cms
 
     class << self
 
+      def permitted_params
+        super + [:attachable_class, :data]
+      end
       # Makes file paths more URL friendly
       def sanitize_file_path(file_path)
         SANITIZATION_REGEXES.inject(file_path.to_s) do |s, (regex, replace)|
@@ -104,7 +97,9 @@ module Cms
                           :whiny => configuration.whiny,
                           :storage => rail_config(:storage),
                           :s3_credentials => rail_config(:s3_credentials),
-                          :bucket => rail_config(:s3_bucket)
+                          :bucket => rail_config(:s3_bucket),
+                          :s3_host_name => rail_config(:s3_host_name),
+                          :s3_host_alias => rail_config(:s3_host_alias)
 
       end
 
@@ -117,11 +112,10 @@ module Cms
       # @param [Class] block_class The class of a block which has an attachment.
       # @param [String] name_of_attachment The name of the attachment association (i.e. if was 'has_attachment :photos' then pass 'photo')
       # @param [Symbol] key The key for the value to be fetched (i.e. :styles)
-      #
       def configuration_value(block_class, name_of_attachment, key)
         class_definitions = definitions[block_class]
         if class_definitions == nil
-          raise "Couldn't find any definitions for '#{block_class}'."
+          raise "Couldn't find any definitions for '#{block_class}'. Available definitions are #{definitions.inspect}."
         end
         attachment_definition = class_definitions[name_of_attachment]
         if attachment_definition == nil
@@ -132,6 +126,14 @@ module Cms
 
     end
 
+    def attachable_class
+      attachable_type
+    end
+
+    # @todo There isn't any good reason I know of why this needs to be a distinct field. Needed to add it to get it working for 4.0 though.
+    def attachable_class=(klass)
+      self.attachable_type = klass
+    end
 
     def section=(section)
       dirty! if self.section != section
@@ -143,7 +145,8 @@ module Cms
     end
 
     def content_block_class
-      attachable_class || attachable.try(:class).try(:name) || attachable_type
+      attachable.try(:class).try(:name) || attachable_type
+      #attachable_class || attachable.try(:class).try(:name) || attachable_type
     end
 
     def icon
@@ -259,15 +262,6 @@ module Cms
         self.cardinality = config[:type].to_s
       end
 
-    end
-
-    # Forces this record to be changed, even if nothing has changed
-    # This is necessary if just the section.id has changed, for example
-    # test if this is necessary now that the attributes are in the
-    # model itself.
-    def dirty!
-      # Seems like a hack, is there a better way?
-      self.updated_at = Time.now
     end
   end
 end

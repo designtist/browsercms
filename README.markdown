@@ -1,6 +1,6 @@
 # BrowserCMS: Humane Content Management for Rails
 
-BrowserCMS is a general purpose, open source Web Content Management System (CMS) that supports Ruby on Rails v3.2. It can be used as a standalone CMS, added to existing Rails projects or extended using Rails Engines. It is designed to support three distinct groups of users:
+BrowserCMS is a general purpose, open source Web Content Management System (CMS) that supports Ruby on Rails v4.0. It can be used as a standalone CMS, added to existing Rails projects or extended using Rails Engines. It is designed to support three distinct groups of users:
 
 1. Non-technical web editors who want a humane system to manage their site, without needing to understand what HTML or even Rails is.
 2. Designers who want to create large and elegantly designed websites with no artificial constraints by the CMS.
@@ -11,7 +11,7 @@ BrowserCMS is intended to offer features comparable to commercial CMS products, 
 
 Here's a quick overview of some of the more notable features:
 
-* Stanealone CMS: BrowserCMS is designed to provide a robust CMS capabilities out of the box for content heavy web sites.
+* Standalone CMS: BrowserCMS is designed to provide a robust CMS capabilities out of the box for content heavy web sites.
 * Mobile Friendly: Sites can be built to use mobile optimized designs that are optimized for small screens, with low bandwidth, with responsive design.
 * In Context Editing: Users can browse their site to locate content and make changes from the page itself.
 * Design friendly Templates: Pages aren't just a template and giant single chunk of HTML. Templates can be built to have multiple editable areas, to allow for rich designs that are still easy to manage by non-technical users.
@@ -28,7 +28,7 @@ Here's a quick overview of some of the more notable features:
 See the [Getting Started](https://github.com/browsermedia/browsercms/wiki/Getting-Started) guide for instructions on how to install and start a project with BrowserCMS.
 
 ## License
-BrowserCMS is released under a LGPL license, and is copyright 1998-2012 BrowserMedia. The complete copyright can be found in COPYRIGHT.txt, and copy of the license can be found in LICENSE.txt.
+BrowserCMS is released under a LGPL license, and is copyright 1998-2014 BrowserMedia. The complete copyright can be found in COPYRIGHT.txt, and copy of the license can be found in LICENSE.txt.
 
 ## Documentation / Support
 The user documentation and guides for this version of the application can be found at:

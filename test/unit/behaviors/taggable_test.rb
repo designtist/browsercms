@@ -6,7 +6,7 @@ ActiveRecord::Base.connection.instance_eval do
 
   drop_table(:versioned_taggable_articles) if table_exists?(:versioned_taggable_articles)
   drop_table(:versioned_taggable_article_versions) if table_exists?(:versioned_taggable_article_versions)
-  create_versioned_table(:versioned_taggable_articles, :prefix=>false) do |t|
+  create_content_table(:versioned_taggable_articles) do |t|
     t.string :name
   end
 end
@@ -14,7 +14,7 @@ end
 class TaggableArticle < ActiveRecord::Base
   is_taggable
 
-  attr_accessible :name, :tag_list
+ #attr_accessible :name, :tag_list
 end
 
 class VersionedTaggableArticle < ActiveRecord::Base
@@ -37,9 +37,9 @@ class TaggableBlockTest < ActiveSupport::TestCase
     assert_equal 2, Cms::Tag.count
     assert_equal 2, Cms::Tagging.count
     
-    assert_equal [article], TaggableArticle.tagged_with("foo").all
-    assert_equal [article], TaggableArticle.tagged_with("bar").all
-    assert TaggableArticle.tagged_with("bang").all.empty?
+    assert_equal [article], TaggableArticle.tagged_with("foo").to_a
+    assert_equal [article], TaggableArticle.tagged_with("bar").to_a
+    assert TaggableArticle.tagged_with("bang").to_a.empty?
         
     article.tag_list = "foo bang"
     assert article.save
@@ -48,9 +48,9 @@ class TaggableBlockTest < ActiveSupport::TestCase
     assert_equal 3, Cms::Tag.count
     assert_equal 2, Cms::Tagging.count
 
-    assert_equal [article], TaggableArticle.tagged_with("foo").all
-    assert_equal [article], TaggableArticle.tagged_with("bang").all
-    assert TaggableArticle.tagged_with("bar").all.empty?
+    assert_equal [article], TaggableArticle.tagged_with("foo").to_a
+    assert_equal [article], TaggableArticle.tagged_with("bang").to_a
+    assert TaggableArticle.tagged_with("bar").to_a.empty?
     
     assert_equal "bang foo", article.tag_list
   end
@@ -65,16 +65,16 @@ class TaggableBlockTest < ActiveSupport::TestCase
       TaggableArticle.create!(:name => "Article ##{n}", :tag_list => tag_list.join(" ") )
     end
     
-    tag_counts = Cms::Tag.counts(:limit => 4)
-    assert_equal 4, tag_counts.size
-    assert_equal Cms::Tag.find_by_name("article"), tag_counts[0]
-    assert_equal 25, tag_counts[0].count.to_i
-    assert_equal Cms::Tag.find_by_name("even"), tag_counts[1]
-    assert_equal 13, tag_counts[1].count.to_i
-    assert_equal Cms::Tag.find_by_name("five"), tag_counts[2]
-    assert_equal 5, tag_counts[2].count.to_i
-    assert_equal Cms::Tag.find_by_name("first"), tag_counts[3]
-    assert_equal 1, tag_counts[3].count.to_i
+    tags_summary = Cms::Tag.counts.limit(4).to_a
+    assert_equal 4, tags_summary.size
+    assert_equal Cms::Tag.find_by_name("article"), tags_summary[0]
+    assert_equal 25, tags_summary[0].count.to_i
+    assert_equal Cms::Tag.find_by_name("even"), tags_summary[1]
+    assert_equal 13, tags_summary[1].count.to_i
+    assert_equal Cms::Tag.find_by_name("five"), tags_summary[2]
+    assert_equal 5, tags_summary[2].count.to_i
+    assert_equal Cms::Tag.find_by_name("first"), tags_summary[3]
+    assert_equal 1, tags_summary[3].count.to_i
 
     
     tag_cloud = Cms::Tag.cloud(:sizes => 9)

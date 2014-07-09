@@ -2,36 +2,42 @@ module Cms
   class Section < ActiveRecord::Base
     flush_cache_on_change
 
-
-
-    #The node that links this section to its parent
-    has_one :section_node, :class_name => 'Cms::SectionNode', :as => :node, :inverse_of => :node
-    SECTION = "Cms::Section"
-    PAGE = "Cms::Page"
-    LINK = "Cms::Link"
-    VISIBLE_NODE_TYPES = [SECTION, PAGE, LINK]
-
-    include DefaultAccessible
-    attr_accessible :allow_groups, :group_ids, :name, :path, :root, :hidden
-
-    include Cms::Addressable
-    include Cms::Addressable::NodeAccessors
-
-
+    is_addressable no_dynamic_path: true, destroy_if: :deletable?
     # Cannot use dependent => :destroy to do this. Ancestry's callbacks trigger before the before_destroy callback.
     #   So sections would always get deleted since deletable? would return true
     after_destroy :destroy_node
     before_destroy :deletable?
 
+    SECTION = "Cms::Section"
+    PAGE = "Cms::Page"
+    LINK = "Cms::Link"
+    VISIBLE_NODE_TYPES = [SECTION, PAGE, LINK]
+    HIDDEN_NODE_TYPES = "Cms::Attachment"
+
+    extend DefaultAccessible
+    # @override
+    def self.permitted_params
+      super + [:allow_groups, group_ids: []]
+    end
+
     has_many :group_sections, :class_name => 'Cms::GroupSection'
     has_many :groups, :through => :group_sections, :class_name => 'Cms::Group'
 
-    scope :root, :conditions => ['root = ?', true]
-    scope :system, :conditions => {:name => 'system'}
-    scope :hidden, :conditions => {:hidden => true}
-    scope :not_hidden, :conditions => {:hidden => false}
-    scope :named, lambda { |name| {:conditions => ["#{table_name}.name = ?", name]} }
-    scope :with_path, lambda { |path| {:conditions => ["#{table_name}.path = ?", path]} }
+    scope :root, -> { where(['root = ?', true]) }
+    scope :system, -> { where({:name => 'system'}) }
+    scope :hidden, -> { where({:hidden => true}) }
+    scope :not_hidden, -> { where({:hidden => false}) }
+
+    def self.named(name)
+      where(["#{table_name}.name = ?", name])
+    end
+
+    def self.with_path(path)
+      where(["#{table_name}.path = ?", path])
+    end
+
+    #scope :named, lambda { |name| {-> {where( ["#{table_name}.name = ?", name]} }   )}
+    #scope :with_path, lambda { |path| {-> {where( ["#{table_name}.path = ?", path]} }    )}
 
     validates_presence_of :name, :path
 
@@ -84,11 +90,11 @@ module Cms
     end
 
     def self.sitemap
-      SectionNode.of_type(VISIBLE_NODE_TYPES).fetch_nodes.arrange(:order => :position)
+      SectionNode.not_of_type(HIDDEN_NODE_TYPES).fetch_nodes.arrange(:order => :position)
     end
 
     def visible_child_nodes(options={})
-      children = child_nodes.of_type(VISIBLE_NODE_TYPES).fetch_nodes.in_order.all
+      children = child_nodes.of_type(VISIBLE_NODE_TYPES).fetch_nodes.in_order.to_a
       visible_children = children.select { |sn| sn.visible? }
       options[:limit] ? visible_children[0...options[:limit]] : visible_children
     end
@@ -137,11 +143,6 @@ module Cms
       !root? && empty?
     end
 
-    # Callback to clean up related nodes
-    def destroy_node
-      node.destroy
-    end
-
     def editable_by_group?(group)
       group.editable_by_section(self)
     end
@@ -166,9 +167,10 @@ module Cms
       current_section
     end
 
-    #The first page that is a decendent of this section
+    #The first page that is a descendent of this section
     def first_page_or_link
-      section_node = child_nodes.of_type([LINK, PAGE]).fetch_nodes.in_order.first
+      types = Cms::ContentType.addressable.collect(&:name).push(LINK).push(PAGE)
+      section_node = child_nodes.of_type(types).fetch_nodes.in_order.first
       return section_node.node if section_node
       sections.each do |s|
         node = s.first_page_or_link
@@ -208,6 +210,15 @@ module Cms
       if code == :all
         self.groups = Cms::Group.all
       end
+    end
+
+    # Sections are accessible to guests if they marked as such. Variables are passed in for performance reasons
+    # since this gets called 'MANY' times on the sitemap.
+    #
+    # @param [Array<Section>] public_sections
+    # @param [Section] parent
+    def accessible_to_guests?(public_sections, parent)
+      public_sections.include?(self)
     end
   end
 end

@@ -2,11 +2,26 @@ module Cms
   class Portlet < ActiveRecord::Base
     validates_presence_of :name
     is_searchable
+    uses_soft_delete
+    has_content_type :module => :core
 
     # These are here simply to temporarily hold these values
     # Makes it easy to pass them through the process of selecting a portlet type
     attr_accessor :connect_to_page_id, :connect_to_container, :controller
-    attr_accessible :connect_to_page_id, :connect_to_container, :controller, :name
+
+    # Descriptions for portlets will be displayed when a user is adding one to page, or when editing the portlet.
+    # The goal is provide a more detailed overview of how a portlet should be used or what it does.
+    # @param [String] description (If supplied, it will set the new value)
+    # @return [String]
+    def self.description(description="")
+      unless description.blank?
+        @description = description
+      end
+      if @description.blank?
+        return "(No description available)"
+      end
+      @description
+    end
 
     delegate :request, :response, :session,
              :flash, :params, :cookies,
@@ -17,11 +32,11 @@ module Cms
       super if defined? super
     ensure
       subclass.class_eval do
+        extend Cms::PolymorphicSingleTableInheritance
 
-        # Using the table prefix here is NOT tested, since unloading classes is hard during tests.
         has_dynamic_attributes :class_name => "CmsPortletAttribute",
                                :foreign_key => "portlet_id",
-                               :table_name => Namespacing.prefix("portlet_attributes"),
+                               :table_name => "cms_portlet_attributes",
                                :relationship_name => :portlet_attributes
 
         acts_as_content_block(
@@ -32,7 +47,6 @@ module Cms
         # Used to skip the 'after_save' callbacks that connect blocks to pages.
         # Portlets aren't verisonable but are connectable, so this will prevent the saving of portlets.
         attr_accessor :skip_callbacks
-
 
         def self.template_path
           default_template_path
@@ -45,6 +59,13 @@ module Cms
         def self.helper_class
           "#{name}Helper".constantize
         end
+
+        # Portlets don't generally support inline editing. Subclasses can override this if they do though.
+        def supports_inline_editing?
+          false
+        end
+
+
       end
     end
 
@@ -52,14 +73,34 @@ module Cms
       false
     end
 
+    # Returns an alphabetical list of classes that descend from Cms::Portlet.
+    #
+    # @return [Array<Class>]
     def self.types
       @types ||= ActiveSupport::Dependencies.autoload_paths.map do |d|
         if d =~ /app\/portlets/
           Dir["#{d}/*_portlet.rb"].map do |p|
-            File.basename(p, ".rb").classify
+            File.basename(p, ".rb").classify.constantize
           end
         end
-      end.flatten.compact.uniq.sort
+      end.flatten.compact.uniq
+      @types.sort! { |a,b| a.name.downcase <=> b.name.downcase }
+      @types.select! { |type| !blacklist.include?(type.name)}
+      @types
+    end
+
+    # Determines if a content_type is blacklisted or not.
+    #
+    # @param [Symbol] type (:dynamic_portlet)
+    def self.blacklisted?(type_name)
+      blacklist.include?(type_name.to_s.camelize)
+    end
+
+    # Returns a blacklist of all content types that shouldn't be accessible. Includes both portlets and other CMS types.
+    #
+    # @return [Array<String>] List of class names ['DynamicPortlet', 'LoginPortlet']
+    def self.blacklist
+      @blacklist ||= Rails.configuration.cms.content_types.blacklist.map {|underscore_name| underscore_name.to_s.camelize }
     end
 
     def self.get_subclass(type)
@@ -137,7 +178,21 @@ module Cms
       true
     end
 
+    # For polymorphic permissions
+    # A generic portlet shouldn't be connected to pages.
+    def connected_pages
+      []
+    end
+
     #----- Portlet Action Related Methods ----------------------------------------
+
+    # Used by portlets to set a custom title, typically in the render body.
+    # For example, this allows a page with a single portlet that might display a content block to set the page name to
+    # that block name.
+    def page_title(new_title)
+      controller.current_page.title = new_title
+    end
+
     def instance_name
       "#{self.class.name.demodulize.underscore}_#{id}"
     end

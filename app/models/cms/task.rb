@@ -8,17 +8,21 @@ module Cms
     belongs_to :assigned_to, :class_name => 'Cms::User'
     belongs_to :page, :class_name => 'Cms::Page'
 
-    include DefaultAccessible
-    attr_accessible :assigned_by, :assigned_to, :page
+    extend DefaultAccessible
 
     after_create :mark_other_tasks_for_the_same_page_as_complete
     after_create :send_email
 
-    scope :complete, :conditions => ["completed_at is not null"]
-    scope :incomplete, :conditions => ["completed_at is null"]
+    scope :complete, ->{ where( ["completed_at is not null"])}
+    scope :incomplete, ->{ where( ["completed_at is null"])}
 
-    scope :for_page, lambda { |p| {:conditions => ["page_id = ?", p]} }
-    scope :other_than, lambda { |t| {:conditions => ["id != ?", t.id]} }
+    def self.for_page(p)
+      where(["page_id = ?", p])
+    end
+
+    def self.other_than(t)
+      where( ["id != ?", t.id])
+    end
 
     validates_presence_of :assigned_by_id, :message => "is required"
     validates_presence_of :assigned_to_id, :message => "is required"
@@ -36,30 +40,19 @@ module Cms
 
     protected
     def mark_other_tasks_for_the_same_page_as_complete
-      self.class.for_page(self.page_id.to_i).other_than(self).incomplete.all.each do |t|
+      self.class.for_page(self.page_id.to_i).other_than(self).incomplete.to_a.each do |t|
         t.mark_as_complete!
       end
     end
 
     def send_email
-      #Hmm... what if the assign_by or assign_to don't have email addresses?
-      #For now we'll say just don't send an email and log that as a warning
-      if assigned_by.email.blank?
-        logger.warn "Can't send email for task because assigned by user #{assigned_by.login}:#{assigned_by.id} has no email address"
-      elsif assigned_to.email.blank?
+      if assigned_to.email.blank?
         logger.warn "Can't send email for task because assigned to user #{assigned_to.login}:#{assigned_to.id} has no email address"
       else
-        domain = Rails.configuration.cms.site_domain
-        if domain =~ /^www/
-          host = domain.sub(/^www\./, "#{cms_domain_prefix}.")
-        else
-          host = "#{cms_domain_prefix}.#{domain}"
-        end
-        email = Cms::EmailMessage.create(
-            :sender => assigned_by.email,
+        Cms::EmailMessage.create(
             :recipients => assigned_to.email,
             :subject => "Page '#{page.name}' has been assigned to you",
-            :body => "http://#{host}#{page.path}\n\n#{comment}"
+            :body => "#{Cms::EmailMessage.absolute_cms_url(page.path)}\n\n#{comment}"
         )
       end
       true #don't accidently return false and halt the chain

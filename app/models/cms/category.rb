@@ -4,18 +4,28 @@ module Cms
     belongs_to :parent, :class_name => 'Cms::Category'
     has_many :children, :class_name => 'Cms::Category', :foreign_key => "parent_id"
     is_searchable
+    has_content_type :module => :categorization
 
-    include DefaultAccessible
-
-    attr_accessible :category_type
+    extend DefaultAccessible
+    include Concerns::IgnoresPublishing
 
     validates_presence_of :category_type_id, :name
     validates_uniqueness_of :name, :scope => :category_type_id
 
-    scope :named, lambda { |name| {:conditions => ["#{table_name}.name = ?", name]} }
-    scope :of_type, lambda { |type_name| {:include => :category_type, :conditions => ["#{CategoryType.table_name}.name = ?", type_name], :order => "#{Category.table_name}.name"} }
-    scope :top_level, :conditions => ["#{Category.table_name}.parent_id is null"]
-    scope :list, :include => :category_type
+    class << self
+      def named(name)
+        where(["#{table_name}.name = ?", name])
+      end
+
+      def of_type(type_name)
+        where(["#{CategoryType.table_name}.name = ?", type_name])
+        .order("#{Category.table_name}.name")
+        .includes(:category_type)
+        .references(:category_type)
+      end
+    end
+    scope :top_level, -> { where(["#{Category.table_name}.parent_id is null"]) }
+    scope :list, -> { includes(:category_type) }
 
     def ancestors
       fn = lambda do |cat, parents|

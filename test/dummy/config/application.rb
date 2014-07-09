@@ -11,6 +11,16 @@ end
 
 module Dummy
   class Application < Rails::Application
+
+    # Disable logging of partials.
+    #config.action_view.logger = nil
+
+    # Silence rails 4.0.2 warning
+    config.i18n.enforce_available_locales = false
+
+    config.action_mailer.default_url_options = { :host => "localhost:3000" }
+
+    config.cms.form_builder_css = 'custom-forms'
     # Settings in config/environments/* take precedence over those specified here.
     # Application configuration should go into files in config/initializers
     # -- all .rb files in that directory are automatically loaded.
@@ -44,16 +54,21 @@ module Dummy
     # like if you have constraints or database-specific column types
     # config.active_record.schema_format = :sql
 
-    # Enforce whitelist mode for mass assignment.
-    # This will create an empty whitelist of attributes available for mass-assignment for all models
-    # in your app. As such, your models will need to explicitly whitelist or blacklist accessible
-    # parameters by using an attr_accessible or attr_protected declaration.
-    config.active_record.whitelist_attributes = true
-
     # Enable the asset pipeline
     config.assets.enabled = true
 
     # Version of your assets, change this if you want to expire all your assets
     config.assets.version = '1.0'
+
+    # Renable for testing
+    config.cms.content_types.blacklist -= [:login_portlet]
+
+    # Verify that default content templates can be overridden.
+    config.cms.templates['dummy/product'] = 'product'
+    config.cms.templates['cms/sites/sessions_controller'] = :subpage
+
+    config.secret_key_base = 'a-fake-key-to-avoid-deprecation-warnings-since-this-is-a-dummy-app-that-wont-be-deployed'
+
+    config.assets.paths << Rails.root.join("app", "assets", "fonts")
   end
 end

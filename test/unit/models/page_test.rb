@@ -3,6 +3,17 @@ require 'test_helper'
 module Cms
   class CreatingPageTest < ActiveSupport::TestCase
 
+    test "#landing_page? if matches parent's path'" do
+      section = create(:section, path: "/about")
+      landing_page = create(:page, path: "/about", parent: section)
+      assert landing_page.landing_page?
+    end
+
+    test "home?" do
+      @page = create(:page, path: "/")
+      assert @page.home?
+    end
+
     test "Testing Database should be empty and have no pages" do
       assert_nil Cms::Page.with_path("/").first
     end
@@ -11,22 +22,22 @@ module Cms
       @page = Cms::Page.new(
           :name => "Test",
           :path => "test",
-          :section => root_section,
-          :publish_on_save => true)
+          :section => root_section
+      )
 
       assert @page.save
       assert_path_is_unique
 
-      @page.update_attributes(:name => "Test v2")
+      @page.update(name: "Test v2", publish_on_save: false)
       page = Cms::Page.find_live_by_path("/test")
       assert_equal "Test", page.name
-
       assert_equal 1, page.version
-
     end
 
-    test "Creating a page builds a section node" do
-      @page = Page.create!(:name => "Hello", :path => "/hello", :section => create(:root_section))
+    test "#create with :parent" do
+      parent = create(:root_section)
+      @page = Page.create!(:name => "Hello", :path => "/hello")
+      @page.parent = parent
       assert_not_nil @page.section_node
     end
 
@@ -52,6 +63,13 @@ module Cms
 
   class VersionTest < ActiveSupport::TestCase
 
+    def draft_page
+      return @draft_page if @draft_page
+      @draft_page = create(:public_page)
+      @draft_page.update(:name => "New", :publish_on_save => false)
+      @draft_page.reload
+    end
+
     def setup
       @page = create(:public_page)
       @another_page = create(:public_page)
@@ -64,7 +82,7 @@ module Cms
 
     test "#latest_version is incremented when page#update occurs" do
       @page.name = "New"
-      @page.save!
+      @page.save_draft
       @page.reload
 
       assert_equal 1, @page.version
@@ -73,10 +91,14 @@ module Cms
       assert_equal 1, @another_page.reload.latest_version, "Should only update its own version, not other tables"
     end
 
+    test "live? should be false for 'new' objects" do
+      refute Cms::Page.new.live?
+    end
+
     test "live? using latest version" do
       assert @page.live?
 
-      @page.update_attributes(:name => "New")
+      @page.update(:name => "New", :publish_on_save => false)
       @page.reload
       refute @page.live?
 
@@ -85,8 +107,16 @@ module Cms
       assert @page.live?
     end
 
+    test "draft pages are not live" do
+      refute draft_page.live?
+    end
+
+    test "draft?" do
+      assert draft_page.draft?
+    end
+
     test "live? as_of_version" do
-      @page.update_attributes(:name => "New")
+      @page.update(:name => "New")
       @page.publish!
 
       v1 = @page.as_of_version(1)
@@ -128,6 +158,12 @@ module Cms
 
   class PageTest < ActiveSupport::TestCase
 
+    test "#deletable?" do
+      @page = build(:page, path: "/")
+      assert @page.home?
+      refute @page.deletable?
+    end
+
     def test_creating_page_with_reserved_path
       @page = Cms::Page.new(:name => "FAIL", :path => "/cms")
       assert_not_valid @page
@@ -152,24 +188,6 @@ module Cms
       assert_equal @page.path, "/slashed/loooong/path"
     end
 
-    def test_find_live_by_path
-      @page = build(:page, :path => '/foo')
-      assert_nil Cms::Page.find_live_by_path('/foo')
-
-      @page.publish!
-      reset(:page)
-      assert_equal @page, Cms::Page.find_live_by_path('/foo')
-
-      @page.update_attributes(:path => '/bar')
-      assert_equal @page, Cms::Page.find_live_by_path('/foo')
-      assert_nil Cms::Page.find_live_by_path('/bar')
-
-      @page.publish!
-      reset(:page)
-      assert_nil Cms::Page.find_live_by_path('/foo')
-      assert_equal @page, Cms::Page.find_live_by_path('/bar')
-    end
-
     test "It should be possible to create a new page, using the same path as a previously deleted page" do
       p = Time.now.to_f.to_s #use a unique, but consistent path
 
@@ -180,18 +198,22 @@ module Cms
       assert_not_equal(@page, @page2)
     end
 
-    test "Find by live path should not located deleted blocks, even if they share paths with live ones" do
-      @page = build(:page, :path => '/foo')
-      @page.publish!
-      reset(:page)
+    test "Make a new page with a path shouldn't create section_node'" do
+      section = create(:section)
+      original_count = Cms::SectionNode.count
+      Cms::Page.new(name: 'New', path: "/", parent: section)
+      assert_equal original_count, Cms::SectionNode.count, "Bug in can_be_addressable means its creating section_node as side effect"
+    end
 
+    test "Find by live path should not located deleted blocks, even if they share paths with live ones" do
+      @page = create(:page, :path => '/foo')
       @page.mark_as_deleted!
       assert_nil Cms::Page.find_live_by_path('/foo')
 
       @new_page = build(:page, :path => '/foo')
       assert_nil Cms::Page.find_live_by_path('/foo')
 
-      @new_page.publish!
+      @new_page.save!
       reset(:new_page)
       assert_equal @new_page, Cms::Page.find_live_by_path('/foo')
       assert_not_equal @page, @new_page
@@ -207,62 +229,12 @@ module Cms
       assert_equal "/foo/bar", page.path
     end
 
-    def test_revision_comments
-      page = create(:page, :section => root_section, :name => "V1")
-
-      assert_equal 'Created', page.live_version.version_comment
-
-      assert page.reload.save
-      assert_equal 'Created', page.reload.live_version.version_comment
-      assert_equal page.live_version.version_comment,
-                   page.as_of_version(page.version).live_version.version_comment
-
-      page.update_attributes(:name => "V2")
-      assert_equal 'Changed name', page.draft.version_comment
-      assert_equal 'Created', page.live_version.version_comment
-
-      block = create(:html_block, :name => "Hello, World!")
-      page.create_connector(block, "main")
-      assert_equal "Html Block 'Hello, World!' was added to the 'main' container",
-                   page.draft.version_comment
-      assert_equal 'Created', page.live_version.version_comment
-      assert_equal 3, page.reload.draft.version
-
-      page.create_connector(create(:html_block, :name => "Whatever"), "main")
-      assert_equal 4, page.reload.draft.version
-
-      page.move_connector_down(page.connectors.for_page_version(page.reload.draft.version).for_connectable(block).first)
-      assert_equal "Html Block 'Hello, World!' was moved down within the 'main' container",
-                   page.draft.version_comment
-      assert_equal 'Created', page.live_version.version_comment
-
-      page.move_connector_up(page.connectors.for_page_version(page.reload.draft.version).for_connectable(block).first)
-      assert_equal "Html Block 'Hello, World!' was moved up within the 'main' container",
-                   page.draft.version_comment
-      assert_equal 'Created', page.live_version.version_comment
-
-      page.remove_connector(page.connectors.for_page_version(page.reload.draft.version).for_connectable(block).first)
-      assert_equal "Html Block 'Hello, World!' was removed from the 'main' container",
-                   page.draft.version_comment
-      assert_equal 'Created', page.live_version.version_comment
-
-      page.revert_to(1)
-      assert_equal "Reverted to version 1",
-                   page.reload.draft.version_comment
-      assert_equal 'Created', page.live_version.version_comment
-
-      assert_equal "Created", page.as_of_version(1).current_version.version_comment
-      assert_equal "Changed name", page.as_of_version(2).current_version.version_comment
-      assert_equal "Reverted to version 1", page.draft.version_comment
-
-    end
-
     def test_container_live
       page = create(:page)
-      published = create(:html_block, :publish_on_save => true)
-      unpublished = create(:html_block)
-      page.create_connector(published, "main")
-      page.create_connector(unpublished, "main")
+      published = create(:html_block)
+      unpublished = create(:html_block, publish_on_save: false)
+      page.add_content(published, "main")
+      page.add_content(unpublished, "main")
       assert !page.container_published?("main")
       assert unpublished.publish
       assert page.container_published?("main")
@@ -296,23 +268,33 @@ module Cms
 
     end
 
+    test "#currently_connected_to" do
+      page = create(:page)
+      block = create(:html_block)
+
+      page.add_content(block)
+      page.publish!
+
+      assert_equal [page], Cms::Page.currently_connected_to(block).to_a
+    end
+
     def test_adding_a_block_to_a_page_puts_page_in_draft_mode
       @page = create(:page, :section => root_section, :publish_on_save => true)
       @block = create(:html_block, :publish_on_save => true)
       reset(:page, :block)
       assert @page.published?
       assert @block.published?
-      @page.create_connector(@block, "main")
+      @page.add_content(@block, "main")
       reset(:page, :block)
-      assert !@page.live?
+      refute @page.live?, "Page should be unpublished after adding content"
     end
 
     def test_reverting_and_then_publishing_a_page
       @page = create(:page, :section => root_section, :publish_on_save => true)
 
       @block = create(:html_block,
-                       :connect_to_page_id => @page.id,
-                       :connect_to_container => "main")
+                      :connect_to_page_id => @page.id,
+                      :connect_to_container => "main")
       @page.publish
 
       reset(:page, :block)
@@ -320,7 +302,7 @@ module Cms
       assert_equal 2, @page.version
       assert_equal 1, @page.connectors.for_page_version(@page.version).count
 
-      @block.update_attributes(:content => "Something else")
+      @block.update(:content => "Something else")
       @page.publish!
       reset(:page, :block)
 
@@ -346,6 +328,78 @@ module Cms
 
   end
 
+  class PageVisibilityTest < ActiveSupport::TestCase
+
+    def page
+      @page ||= build(:page, archived: true, hidden: true)
+    end
+
+    test ".permitted_params" do
+      assert Cms::Page.permitted_params.include? :visibility
+    end
+
+    test "#visiblities" do
+      refute page.visibilities.empty?
+    end
+
+    test "#visibility" do
+      assert_equal :archived, build(:page, archived: true, hidden: false).visibility
+      assert_equal :archived, build(:page, archived: true, hidden: true).visibility
+      assert_equal :public, build(:page, archived: false, hidden: false).visibility
+      assert_equal :hidden, build(:page, archived: false, hidden: true).visibility
+    end
+
+    test "#visibility= public" do
+      page.visibility = 'public'
+      assert_equal :public, page.visibility
+      refute page.archived?
+      refute page.hidden?
+    end
+
+    test "#visibility= archived" do
+      page.visibility = 'archived'
+      assert_equal :archived, page.visibility
+      assert page.archived?
+      refute page.hidden?
+    end
+
+    test "#visibility= hidden" do
+      page.visibility = 'hidden'
+      assert_equal :hidden, page.visibility
+      refute page.archived?
+      assert page.hidden?
+    end
+  end
+
+
+  class PageAccessiblityTest < ActiveSupport::TestCase
+
+    def public_sections
+      [public_section]
+    end
+
+    def public_section
+      @public_section ||= create(:public_section)
+    end
+
+    def protected_section
+      @protected_section ||= create(:protected_section)
+    end
+
+    def protected_page
+      @protected_page ||= create(:page, parent: protected_section)
+    end
+
+    test "accessible_to_guests?" do
+      public_page = create(:public_page, parent: public_section)
+      assert public_page.accessible_to_guests?(public_sections, public_section)
+    end
+
+    test "pages in restricted sections are not accessible_to_guests?" do
+      refute protected_page.accessible_to_guests?(public_sections, protected_section)
+    end
+  end
+
   class UserStampingTest < ActiveSupport::TestCase
 
     def setup
@@ -366,7 +420,7 @@ module Cms
 
       Cms::User.current = @new_guy
 
-      page.update_attributes(:name => "Something Different")
+      page.update(:name => "Something Different", :publish_on_save => false)
 
       assert_equal "Something Different", page.draft.name
       assert_equal "Original Value", page.reload.name
@@ -407,7 +461,7 @@ module Cms
     end
 
     test "#top_level_section works for page in root section" do
-      page = create(:public_page, :parent=>root_section)
+      page = create(:public_page, :parent => root_section)
       assert_equal root_section, page.top_level_section
     end
 
@@ -441,7 +495,7 @@ module Cms
       connector_count = Cms::Connector.count
 
       page_version = @page.version
-      @page.update_attributes(:name => "Foo")
+      @page.update(name: "Foo", publish_on_save: false)
 
       assert_incremented connector_count, Cms::Connector.count
       assert_equal page_version, @page.version
@@ -453,7 +507,7 @@ module Cms
       connector_count = Cms::Connector.count
       page_version = @page.version
 
-      @page.update_attributes(:name => @page.name)
+      @page.update(:name => @page.name)
 
       assert_equal connector_count, Cms::Connector.count
 
@@ -491,6 +545,7 @@ module Cms
       @connector = @page.create_connector(@block, "main")
       reset(:page, :block)
     end
+
 
     test "Adding a block to a page without publishing" do
       assert_equal 1, @page.version, "The unpublished page should still be version 1"
@@ -553,7 +608,7 @@ module Cms
 
 
       # should leave the previous connectors untouched
-      @conns = @page.connectors.all(:conditions => ["page_version < 4"], :order => "id")
+      @conns = @page.connectors.where(["page_version < 4"]).order("id").to_a
 
       assert_equal 3, @conns.size
 
@@ -578,7 +633,7 @@ module Cms
           :connectable_version => 1
       }
 
-      @conns = @page.connectors.for_page_version(4).all(:order => "id")
+      @conns = @page.connectors.for_page_version(4).order("id").to_a
       assert_equal 3, @conns.size
 
       assert_properties @conns[0], {
@@ -619,7 +674,7 @@ module Cms
 
     def test_editing_one_of_the_blocks_creates_a_new_version_of_the_page
       page_version = @page.draft.version
-      @foo_block.update_attributes(:name => "Something Else")
+      @foo_block.update(:name => "Something Else")
       assert_incremented page_version, @page.draft.version
     end
 
@@ -654,7 +709,7 @@ module Cms
 
       assert_equal connector_count + 2, Cms::Connector.count
 
-      foo, bar = @page.reload.connectors.for_page_version(@page.draft.version).find(:all, :order => "#{Cms::Connector.table_name}.position")
+      foo, bar = @page.reload.connectors.for_page_version(@page.draft.version).order("#{Cms::Connector.table_name}.position")
 
       assert_properties foo, {
           :page => @page,
@@ -672,8 +727,9 @@ module Cms
     end
 
     def test_updating_one_of_the_blocks_and_reverting_to_version_before_the_update
+
       target_version = @page.draft.version
-      @foo_block.update_attributes!(:name => "Foo V2")
+      @foo_block.update!(:name => "Foo V2", :publish_on_save => false)
       @page.reload
 
       page_version = @page.draft.version
@@ -683,13 +739,13 @@ module Cms
 
       assert_incremented page_version, @page.draft.version
       assert_incremented foo_block_version, @foo_block.draft.version
-      assert_equal "Foo Block", @page.connectors.for_page_version(@page.draft.version).reload.first.connectable.name
+      assert_equal "Foo Block", @page.connectors.for_page_version(@page.draft.version).reload.first.connectable.name, "This might be correct now. When you revert"
     end
 
     protected
     def remove_both_connectors!
-      @page.remove_connector(@page.connectors.for_page_version(@page.draft.version).first(:order => "#{Cms::Connector.table_name}.position"))
-      @page.remove_connector(@page.connectors.for_page_version(@page.draft.version).first(:order => "#{Cms::Connector.table_name}.position"))
+      @page.remove_connector(@page.connectors.for_page_version(@page.draft.version).order("#{Cms::Connector.table_name}.position").first)
+      @page.remove_connector(@page.connectors.for_page_version(@page.draft.version).order("#{Cms::Connector.table_name}.position").first)
     end
 
 
@@ -699,9 +755,29 @@ module Cms
     def setup
       @page = create(:page, :section => root_section)
       @block = create(:html_block)
-      @conn = @page.create_connector(@block, "bar")
+      @conn = @page.add_content(@block, "bar")
       @page.publish!
-      @conn = @page.connectors.for_page_version(@page.version).for_connectable(@block).first
+      @conn = first_connector_for(@page, @block)
+    end
+
+    def first_connector_for(page, block)
+      page.connectors.for_page_version(page.version).for_connectable(block).first
+    end
+
+    test ".current_connectors finds all connectors for current version of the page" do
+      assert_equal [@conn], @page.current_connectors
+    end
+
+    test ".current_connectors(name) returns connectors for given container" do
+      new_conn = @page.add_content(create(:html_block), "main")
+      @page.publish!
+      assert_equal [new_conn], @page.current_connectors(:main)
+      assert_equal [first_connector_for(@page, @block)], @page.current_connectors(:bar)
+
+    end
+
+    test ".contents finds all non-deleted content items for the current version of the page" do
+      assert_equal [@conn.connectable], @page.contents
     end
 
     def test_removing_connector
@@ -715,7 +791,7 @@ module Cms
 
       assert_incremented page_version, @page.draft.version
 
-      conns = @page.connectors.for_page_version(@page.draft.version-1).all
+      conns = @page.connectors.for_page_version(@page.draft.version-1).to_a
       assert_equal 1, conns.size
 
       assert_properties conns.first, {
@@ -734,14 +810,14 @@ module Cms
       @conn2 = @page.create_connector(@block2, "bar")
       @conn3 = @page.create_connector(@block2, "foo")
       #Need to get the new connector that matches @conn2, otherwise you will delete an older version, not the latest connector
-      @conn2 = Cms::Connector.first(:conditions => {:page_id => @page.reload.id, :page_version => @page.draft.version, :connectable_id => @block2.id, :connectable_version => @block2.version, :container => "bar"})
+      @conn2 = Cms::Connector.where({:page_id => @page.reload.id, :page_version => @page.draft.version, :connectable_id => @block2.id, :connectable_version => @block2.version, :container => "bar"}).first
       @page.remove_connector(@conn2)
 
       page_version_count = Cms::Page::Version.count
       page_version = @page.draft.version
       page_connector_count = @page.connectors.for_page_version(@page.draft.version).count
 
-      @conn = Cms::Connector.first(:conditions => {:page_id => @page.reload.id, :page_version => @page.draft.version, :connectable_id => @block2.id, :connectable_version => @block2.version, :container => "foo"})
+      @conn = Cms::Connector.where({:page_id => @page.reload.id, :page_version => @page.draft.version, :connectable_id => @block2.id, :connectable_version => @block2.version, :container => "foo"}).first
       @page.remove_connector(@conn)
       @page.reload
 
@@ -803,7 +879,6 @@ module Cms
 
   class RevertingABlockThatIsOnMultiplePagesTest < ActiveSupport::TestCase
     def test_that_it_reverts_both_pages
-      Cms::Page.delete_all
 
       # 1. Create a new page (Page 1, v1)
       @page1 = create(:page, :name => "Page 1")
@@ -814,7 +889,7 @@ module Cms
 
       # 3. Add a new html block to Page 1. Save, don't publish. (Page 1, v2)
       @block = create(:html_block, :name => "Block v1",
-                       :connect_to_page_id => @page1.id, :connect_to_container => "main")
+                      :connect_to_page_id => @page1.id, :connect_to_container => "main")
       reset(:page1, :page2, :block)
       assert_equal 2, @page1.draft.version
       assert_equal 1, @page2.draft.version
@@ -826,7 +901,7 @@ module Cms
       assert_equal 2, @page2.draft.version
 
       # 5. Edit the block (Page 1, v3, Page 2, v3, Block v2)
-      @block.update_attributes!(:name => "Block v2")
+      @block.update!(:name => "Block v2", :publish_on_save => false)
       reset(:page1, :page2, :block)
       assert_equal 3, @page1.draft.version
       assert_equal 3, @page2.draft.version
@@ -866,7 +941,7 @@ module Cms
       assert_equal 1, @block.draft.version
 
       # 4. Edit Block A (Page A v4, Block A v3)
-      @block.update_attributes!(:name => "Block 2")
+      @block.update!(:name => "Block 2", :publish_on_save => false)
       reset(:page, :block)
       assert_equal 2, @page.version
       assert_equal 3, @page.draft.version
@@ -898,4 +973,6 @@ module Cms
       assert @page.reload.connectors.for_page_version(@page.draft.version).empty?, "Verify that all connectors for the latest page are removed."
     end
   end
+
+
 end

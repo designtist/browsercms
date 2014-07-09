@@ -1,4 +1,4 @@
-require 'rails/generators/active_record/migration'
+require 'rails/generators/migration'
 require 'rails/generators/resource_helpers'
 
 module Cms
@@ -12,22 +12,40 @@ module Cms
       include Rails::Generators::Migration
       include Rails::Generators::ResourceHelpers
 
+      def set_classpath
+        @in_core_application = false
+        unless namespaced?
+          cms_engine_module_name = Cms::EngineAware.module_name(Rails.application.class).constantize
+          Rails::Generators.namespace = cms_engine_module_name
+          @in_core_application = true
+        end
+      end
+
+      def generate_controller
+        application_controller = File.join('app/controllers', class_path, "application_controller.rb")
+        unless File.exists?(application_controller)
+          template 'application_controller.rb.erb', application_controller
+        end
+      end
+
       hook_for :orm, :in => :rails, :required => true, :as => :model
 
       def alter_the_model
         model_file = File.join('app/models', class_path, "#{file_name}.rb")
         spaces = namespaced? ? 4 : 2
         insert_into_file model_file, indent("acts_as_content_block\n", spaces), :after => "ActiveRecord::Base\n"
+        insert_into_file model_file, indent("content_module :#{file_name.pluralize}\n", spaces), :after => "acts_as_content_block\n"
       end
 
       def alter_the_migration
         migration = self.class.migration_exists?(File.absolute_path("db/migrate"), "create_#{table_name}")
-        gsub_file migration, "create_table", "create_content_table"
-        insert_into_file migration, :after => "def change\n" do
-          <<-RUBY
-    Cms::ContentType.create!(:name => "#{class_name}", :group_name => "#{group_name}")
-          RUBY
+
+        if @in_core_application
+          gsub_file migration, "create_table :#{table_name}", "create_table :#{unnamespaced_table_name}"
         end
+
+        gsub_file migration, "create_table", "create_content_table"
+
 
         # Attachments do not require a FK from this model to attachments.
         self.attributes.select { |attr| attr.type == :attachment }.each do |attribute|
@@ -35,9 +53,6 @@ module Cms
         end
         self.attributes.select { |attr| attr.type == :attachments }.each do |attribute|
           gsub_file migration, "t.attachments :#{attribute.name}", ""
-        end
-        unless class_name.starts_with?("Cms::")
-          gsub_file migration, " do |t|", ", :prefix=>false do |t|"
         end
         self.attributes.select { |attr| attr.type == :category }.each do
           gsub_file migration, "t.category", "t.belongs_to"
@@ -47,25 +62,34 @@ module Cms
         end
       end
 
-      hook_for :resource_controller, :in => :rails, :as => :controller, :required => true do |controller|
-        invoke controller, [namespaced_controller_name, options[:actions]]
+      hook_for :resource_controller, :in => :rails, :as => :controller, :required => true do |instance, controller|
+        instance.invoke controller, [instance.name.pluralize]
       end
 
+
       def create_controller_and_views
-        gsub_file File.join('app/controllers', cms_or_class_path, "#{file_name.pluralize}_controller.rb"), /ApplicationController/, "Cms::ContentBlockController"
-        template '_form.html.erb', File.join('app/views', cms_or_class_path, file_name.pluralize, "_form.html.erb")
-        template 'render.html.erb', File.join('app/views', cms_or_class_path, file_name.pluralize, "render.html.erb")
+        gsub_file File.join('app/controllers', class_path, "#{file_name.pluralize}_controller.rb"), /ApplicationController/, "Cms::ContentBlockController"
+        template '_form.html.erb', File.join('app/views', class_path, file_name.pluralize, "_form.html.erb")
+        template 'render.html.erb', File.join('app/views', class_path, file_name.pluralize, "render.html.erb")
       end
 
       def create_routes
-        if namespaced?
+        if namespaced? && !@in_core_application
           route "content_blocks :#{file_name.pluralize}"
         else
-          route "namespace :cms  do content_blocks :#{file_name.pluralize} end"
+          route "namespace :#{namespace.name.underscore} do content_blocks :#{file_name.pluralize} end"
         end
       end
 
       private
+
+      # @override NamedBase#table_name Copy&Paste of this method to make sure project table names are not actually namespaced in migrations.
+      def unnamespaced_table_name
+        @unnamespaced_table_name ||= begin
+          base = pluralize_table_names? ? plural_name : singular_name
+          (regular_class_path + [base]).join('_')
+        end
+      end
 
       def model_has_attachment?
         !attachment_attributes().empty?
@@ -73,36 +97,6 @@ module Cms
 
       def attachment_attributes
         self.attributes.select { |attr| attr.type == :attachment }
-      end
-
-
-      def group_name
-        if namespaced?
-          class_name.split("::").first
-        else
-          class_name
-        end
-      end
-
-      def namespaced_controller_name
-        unless namespaced?
-          "cms/#{@controller_name}"
-        else
-          @controller_name
-        end
-      end
-
-      # Modules want to put classes under their namespace folders, i.e
-      #   - app/controllers/bcms_widgets/widget_controller
-      #
-      # while projects want to put it under cms
-      #   - app/controllers/cms/widget_controller
-      def cms_or_class_path
-        if namespaced?
-          class_path
-        else
-          ["cms"]
-        end
       end
     end
   end

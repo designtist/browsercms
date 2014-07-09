@@ -15,19 +15,5 @@ jQuery(function($){
 });
 </script>
 <% end %>
-
-<% page_title "New Page" %>
-<%= content_for :functions do %>
-<%= "<h1>#{ @page_title }</h1>" %> 
-<%= link_to(span_tag("list all"), cms.sitemap_path, :class => "button") %>
-<br clear="all"/>
-<% end %>
-<%= form_for(@page) do |f| %>
-  <%= hidden_field_tag :section_id, @page.section_id %>
-  
-  <%= render :partial => 'form', :locals => {:f => f} %>
-  <div class="buttons">
-  <%= lt_button_wrapper(f.submit("Save", :class => "submit", :tabindex => next_tabindex)) %>
-  </div>
-<% end %>
-
+<% use_page_title "Add A New Page" %>
+<%= render 'form' %>

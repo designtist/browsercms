@@ -3,30 +3,22 @@ require 'test_helper'
 class PageTemplateTest < ActiveSupport::TestCase
   def setup
     @page_template = build(:page_template, :name => "test")
-    File.delete(@page_template.file_path) if File.exists?(@page_template.file_path)
   end
 
-  def teardown
-    File.delete(@page_template.file_path) if File.exists?(@page_template.file_path)
+  test "#hint" do
+    assert_equal String, @page_template.hint.class
+    refute @page_template.hint.blank?
   end
 
-
-  test "Name used to build the form" do
-    assert_equal "page_template", Cms::PageTemplate.resource_collection_name
-  end
-
-  test "resource_name works for namespaced templates" do
-    assert_equal "page_templates", Cms::PageTemplate.resource_name
-
+  test "#placeholder" do
+    assert_equal String, @page_template.placeholder.class
+    refute @page_template.placeholder.blank?
   end
 
   def test_create_and_destroy
-    assert !File.exists?(@page_template.file_path), "template file already exists"
     assert_valid @page_template
     assert @page_template.save
-    assert File.exists?(@page_template.file_path), "template file was not written to disk"
     @page_template.destroy
-    assert !File.exists?(@page_template.file_path), "template file was not removed on destroy"
   end
 
   def test_for_valid_name
@@ -46,5 +38,10 @@ class PageTemplateTest < ActiveSupport::TestCase
 
   def test_default_body
     assert_not_nil Cms::PageTemplate.default_body
+  end
+
+  def test_display_name
+    assert_equal "Foo (html/erb)", Cms::PageTemplate.display_name("foo.html.erb")
+    assert_equal "Foo (slim)", Cms::PageTemplate.display_name("foo.slim")
   end
 end

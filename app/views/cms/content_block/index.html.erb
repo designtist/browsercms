@@ -1,0 +1,87 @@
+<% use_page_title "Assets - #{content_type.display_name_plural}" %>
+<div class="padded row-fluid clearfix">
+  <h1 class="span3">Assets</h1>
+
+  <%= form_for @search_filter, url: engine_aware_path(@search_filter.model_class), html: {class: 'form-search'}, method: :get do |f| %>
+      <%= f.text_field :term, class: "span6 search-query right", placeholder: "Search #{content_type.display_name_plural}" %>
+  <% end %>
+</div>
+<%= form_tag engine_aware_path(@search_filter.path), method: :put do %>
+    <div class="padded row-fluid clearfix">
+      <div class="btn-group span3 top-buttons">
+        <button class="btn btn-small dropdown-toggle btn-solo" data-toggle="dropdown" data-purpose="subheader">
+          <%= content_type.display_name_plural %> &nbsp;<span class="caret"></span>
+        </button>
+        <%= render partial: 'layouts/cms/content_types', locals: {library: false, id: 'asset-selector-menu'} %>
+      </div>
+
+    <span class="span9 top-buttons">
+        <%= submit_tag "Publish", class: "right btn btn-small btn-primary primary-cta" if content_type.model_class.publishable? %>
+
+        <div class="btn-group right">
+          <%= submit_tag "Delete", class: 'btn btn-small', data: {confirm: 'Are you sure you want to delete all these records?'} %>
+        </div>
+
+        <%= yield :bulk_actions if content_for?(:bulk_actions) %>
+        <h4 class="right"><%= @total_number_of_items %> ITEMS</h4>
+    </span>
+    </div>
+
+    <div class="main-content padded row-fluid clearfix">
+      <table class="table table-bordered assets">
+        <thead>
+        <tr>
+          <th class="check-cell"><%#<input type="checkbox">
+        # Only single select for time being.
+                                 %></th>
+          <% content_type.columns_for_index.each_with_index do |column, i| %>
+              <th>
+                <% if column[:order] %>
+                    <%= link_to column[:label], sortable_column_path(content_type, column[:order]) %>
+                    <span class='caret'></span>
+                <% else %>
+                    <%= column[:label] %>
+                <% end %>
+              </th>
+          <% end %>
+          <% if (content_type.model_class.respond_to?(:created_by)) %>
+              <th>Created By</th>
+          <% end %>
+          <% if content_type.model_class.connectable? %>
+              <th>Used</th>
+          <% end %>
+        </tr>
+        </thead>
+
+        <tbody>
+        <% @blocks.each do |block| %>
+            <tr>
+              <td class="check-cell"><%= check_box_tag 'content_id[]', block.id %></td>
+              <% content_type.columns_for_index.each_with_index do |column, i| %>
+                  <td>
+                    <%= link_to_if(i == 0, block.send(column[:method]), edit_engine_aware_path(block)) %>
+                    <%= draft_icon_tag(block) if i == 0 %>
+                  </td>
+              <% end %>
+              <% if (content_type.model_class.respond_to?(:created_by)) %>
+                  <td><%= block.created_by.try(:full_name) %></td>
+              <% end %>
+              <% if content_type.model_class.connectable? %>
+                  <td><%= block.connected_pages.size %></td>
+              <% end %>
+            </tr>
+        <% end %>
+        </tbody>
+      </table>
+    </div>
+
+<% end %>
+
+<div class='padded row-fluid clearfix'>
+  <% if !@search_filter.term.blank? && @blocks.size == 0 %>
+    <div class="pagination">No results found for '<%= @search_filter.term %>'</div>
+  <% elsif @blocks.total_pages > 1 %>
+    <%= render_pagination @blocks, content_type, :order => params[:order], :search => @search_filter.term %>
+  <% end %>
+
+</div>

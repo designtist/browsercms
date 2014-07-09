@@ -37,7 +37,6 @@ module Cms
           @instance_variable_name_for_view = options[:instance_variable_name_for_view]
 
           extend ClassMethods
-          extend EngineHelper
           include InstanceMethods
 
           # I'm not pleased with the need to include all of the these rails helpers onto every 'renderable' content item
@@ -82,11 +81,7 @@ module Cms
       # of the renderable, so if you have an Article that is renderable, 
       # the template will be "articles/render"
       def template_path
-        path = "#{name.underscore.pluralize}/render"
-        if main_app_model?
-          path = "cms/#{path}"
-        end
-        path
+        "#{name.underscore.pluralize}/render"
       end
 
       # Instance variables that will not be copied from the renderable to the view
@@ -96,6 +91,19 @@ module Cms
 
     end
     module InstanceMethods
+
+      # Returns the Mercury editor type for a given attribute
+      # @param [Symbol] method (i.e. :name, :content, etc)
+      # @return [Hash]
+      def editor_info(method)
+        column = self.class.columns_hash[method.to_s]
+        if column.type == :text
+          {:element => 'div', :region => 'full'}
+        else
+          {:element => 'span', :region => 'simple'}
+        end
+      end
+
       def prepare_to_render(controller)
         # Give this renderable a reference to the controller
         @controller = controller
@@ -123,12 +131,14 @@ module Cms
 
         if self.respond_to?(:deleted) && self.deleted
           logger.error "Attempting to render deleted object: #{self.inspect}"
-          msg = (@mode == 'edit' ? %Q[<div class="error">This #{self.class.name} has been deleted.  Please remove this container from the page</div>] : '')
+          msg = (edit_mode? ? %Q[<div class="error">This #{self.class.name} has been deleted.  Please remove this container from the page</div>] : '')
           return msg
         end
 
         # Create, Instantiate and Initialize the view
         action_view = Cms::ViewContext.new(@controller, assigns_for_view)
+
+        add_content_helpers_if_defined(action_view)
 
         # Determine if this content should render from a file system template or inline (i.e. database based template)
         if respond_to?(:inline_options) && self.inline_options && self.inline_options.has_key?(:inline)
@@ -152,6 +162,18 @@ module Cms
       end
 
       protected
+
+      # Add the helper class for this particular object, if its defined
+      # This is mostly for portlets, and should not fail if no helper is defined.
+      def add_content_helpers_if_defined(action_view)
+        begin
+          helper_module = self.class.helper_class
+          action_view.extend(helper_module)
+        rescue NameError => error
+          logger.debug "No helper class named '#{error.missing_name}' was found. This isn't necessarily an error as '#{self.class}' doesn't NEED a separate helper.'"
+        end
+      end
+
       def copy_instance_variables_from_controller!
         if @controller.respond_to?(:instance_variables_for_rendering)
           @controller.instance_variables_for_rendering.each do |iv|

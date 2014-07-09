@@ -8,33 +8,33 @@ Feature: Manage Page Routes
 
   Scenario: Show Rails Routes
     When I request /cms/routes
-    Then I should see a page titled "Rails Routes"
+    Then I should see a page named "Rails Routes"
 
   Scenario: Match a path to a Controller
     When I request /cms/routes
-    And I search for a path including "/cms/sample_blocks/1"
+    And I search for a path including "/dummy/sample_blocks/1"
     Then I should see the following content:
-      | {:action=>"show", :controller=>"cms/sample_blocks", :id=>"1"} |
+      | {:action=>"show", :controller=>"dummy/sample_blocks", :id=>"1"} |
 
   Scenario: Create Page Route
     When I request /cms/page_routes
-    Then I should see a page titled "List Page Routes"
+    Then I should see a page named "Page Routes"
     When I click on "Add"
-    Then I should see a page titled "New Page Route"
+    Then I should see a page named "Add a New Page Route"
     When create a Page Route with the following:
       | name     |
       | my_route |
-    Then I should see a page titled "'my_route' Page Route"
+    Then I should see a page named "Page Routes"
     And I should see the following content:
       | my_route |
 
   Scenario: Edit Page Route
     Given a Page Route exists
     When I edit that page route
-    Then I should see a page titled "Edit Page Route"
+    Then I should see a page named "Edit Page Route"
     When I fill in "Name" with "My Updated Route"
-    And I click on "Save"
-    Then I should see a page titled "'My Updated Route' Page Route"
+    And I click the Save button
+    Then I should see a page named "Page Routes"
     And I should see "My Updated Route"
 
   Scenario: A simple route to a CMS page

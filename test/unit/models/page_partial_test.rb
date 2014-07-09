@@ -2,31 +2,36 @@ require 'test_helper'
 
 class PagePartialTest < ActiveSupport::TestCase
   def setup
-    @page_partial = build(:page_partial, :name => "_test")
-    File.delete(@page_partial.file_path) if File.exists?(@page_partial.file_path)
+    @page_partial = build(:page_partial)
   end
 
-  def teardown
-    File.delete(@page_partial.file_path) if File.exists?(@page_partial.file_path)
+  test "#hint" do
+    assert_equal String, @page_partial.hint.class
+    refute @page_partial.hint.blank?
+  end
+
+  test "#placeholder" do
+    assert_equal String, @page_partial.placeholder.class
+    refute @page_partial.placeholder.blank?
+  end
+
+  test "calculates path" do
+    @page_partial.save!
+    assert_equal "partials/#{@page_partial.name}", @page_partial.path
   end
 
   test "mass assignment works" do
     Cms::PagePartial.new(:name=>"A", :format=>"B", :handler=>"C", :body=>"D")
     Cms::PageTemplate.new(:name=>"A", :format=>"B", :handler=>"C", :body=>"D")
   end
-  test "Name used to build the form" do
-    assert_equal "page_partial", Cms::PagePartial.resource_collection_name
-  end
 
-  test "resource_name works for namespaced templates" do
-    assert_equal "page_partials", Cms::PagePartial.resource_name
+  test "create" do
+    @page_partial.save!
   end
 
   def test_create
-    assert !File.exists?(@page_partial.file_path), "partial file already exists"
     assert_valid @page_partial
     assert @page_partial.save
-    assert File.exists?(@page_partial.file_path), "partial file was not written to disk"
   end
 
   def test_for_valid_name

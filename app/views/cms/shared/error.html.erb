@@ -1,4 +1,4 @@
-<% page_title "Error: #{exception.class}" %>
+<% use_page_title "Error: #{exception.class}" %>
 
 <%# 
   Note that we have to clear out the existing contents of
@@ -6,9 +6,6 @@
   an error occur in the view after stuff has been already
   set in those variables
 %>
-
-<% @content_for_functions = "" %>
-<%= content_for :functions, "<h1>#{ @page_title }</h1>" %>
 
 <% @content_for_html_head = "" %>
 <%= content_for :html_head do %>
@@ -32,7 +29,10 @@
   </style>
 <% end %>
 
-<div class="cms_error">
+<%= render layout: 'cms/application/page_title' do %>
+    <%= link_to "Back", :back, class: 'btn btn-small right' %>
+<% end %>
+<div class="cms_error padded row-fluid">
   <h2>Message</h2>
   <pre><%=h exception.message %></pre>
   <h2>Stacktrace</h2>

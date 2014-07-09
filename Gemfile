@@ -1,8 +1,9 @@
 source 'http://rubygems.org'
 
+ruby '2.0.0'
+
 # Load this project as a gem.
 gemspec
-
 gem "mysql2"
 
 gem 'yard', :groups=>[:development, :test]
@@ -16,17 +17,30 @@ group :production do
   gem 'uglifier'
 end
 
+group :development do
+  gem 'rake'
+  gem 'debugger'
+  gem 'quiet_assets'
+end
+group :test, :development do
+  gem 'minitest'
+  gem 'minitest-rails'
+  gem 'minitest-reporters'
+end
+
 group :test do
-  gem 'factory_girl_rails'
-  gem 'test-unit', '2.1.1'
-  # :require=>false allows mocha to correctly modify the test:unit code to add mock() and stub()
-  gem "mocha", '=0.9.8', :require=>false
+  gem 'poltergeist'
+  gem 'm', '~> 1.2'
+
+  gem 'single_test'
+  gem 'factory_girl_rails', '3.3.0'
+  gem "mocha", :require=>false
   gem "sqlite3-ruby", :require => "sqlite3"
 
   # Cucumber and dependencies
   gem 'capybara'
   gem 'database_cleaner'
-  gem 'cucumber-rails'
+  gem 'cucumber-rails', :require=> false
   gem 'cucumber'
   gem 'launchy'
   gem 'ruby-prof'

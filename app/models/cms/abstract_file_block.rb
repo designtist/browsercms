@@ -1,15 +1,19 @@
 module Cms
   class AbstractFileBlock < ActiveRecord::Base
+    self.table_name = "cms_file_blocks"
 
+    def self.with_parent_id(parent_id)
+      if parent_id == 'all'
+        where(true) # Empty scope for chaining
+      else
+        self.includes({:attachments => :section_node})
+            .references(:section_node)
+            .where(["#{"cms_section_nodes"}.ancestry = ?",  Section.find(parent_id).ancestry_path])
 
-    self.table_name = Namespacing.prefix("file_blocks")
+      end
+    end
 
     validates_presence_of :name
-
-    scope :by_section, lambda { |section| {
-        :include => {:attachments => :section_node},
-        :conditions => ["#{SectionNode.table_name}.ancestry = ?", section.node.ancestry_path]}
-    }
 
     # Return the parent section for this block.
     # @return [Cms::Section]

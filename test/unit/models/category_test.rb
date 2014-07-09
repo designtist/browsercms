@@ -1,6 +1,12 @@
 require 'test_helper'
 
 class CategoryTest < ActiveSupport::TestCase
+
+
+  test "#create! with publish_on_save" do
+    assert create(:category,  publish_on_save: true)
+  end
+
   def test_creating_categories
     @a_type = create(:category_type, :name => "A")
     @b_type = create(:category_type, :name => "B")
@@ -35,6 +41,6 @@ class CategoryTest < ActiveSupport::TestCase
       "#{@a.name} > #{@a1.name}",
       "#{@a.name} > #{@a1.name} > #{@a1a.name}",
       "#{@a.name} > #{@a2.name}"
-    ], Cms::Category.of_type("A").all.map(&:path)
+    ], Cms::Category.of_type("A").to_a.map(&:path)
   end
 end

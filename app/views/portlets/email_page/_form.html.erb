@@ -1,6 +1,5 @@
-<%= f.cms_text_field :name %>
-<%= f.cms_text_field :subject, 
-  :default_value => "A link you might be interested in" %>
-<%= f.cms_text_field :success_url, 
-  :instructions => "Leave blank to return the same page" %>
-<%= f.cms_text_area :template,  :default_value => EmailPagePortlet.default_template  %>
+<%= f.input :name %>
+<%= f.input :sender, hint: "Enter the email for the 'from' field on any emails sent out." %>
+<%= f.input :subject, input_html: { value: f.object.subject || "A link you might be interested in" } %>
+<%= f.input :success_url, hint: "Leave blank to return the same page" %>
+<%= f.input :template, as: :template_editor  %>

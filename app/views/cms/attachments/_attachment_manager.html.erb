@@ -1,0 +1,39 @@
+<%= render :partial => 'cms/attachments/attachment_table', :locals => {:block => @block, :can_delete => true} %>
+<%= link_to 'Upload a New Attachment', "#", class: 'btn btn-primary', data: {toggle: "modal", target: "#upload-attachment"} %>
+
+<% content_for :before_main_content do
+  # Must be outside main form, since we can't have a form within a form.
+%>
+    <div class="modal fade" id="upload-attachment">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+            <h4 class="modal-title">Upload a New Attachment</h4>
+          </div>
+          <div class="modal-body">
+            <%= simple_form_for Cms::Attachment.new do |af| %>
+                <%= af.input :attachable_type, collection: asset_types, label: 'Type', include_blank: false %>
+                <%= hidden_field_tag :attachment_id_list, "", :id => "attachment_manager_ids_list" %>
+                <%= hidden_field_tag :attachments_changed, "", :id => "attachments_manager_changed" %>
+
+                <%= af.input :data, label: 'File', input_html: {id: 'asset_add_file', onchange: "$.cms.AttachmentManager.upload(this)"} %>
+                <input type="hidden" id="asset_attachable_id" name="asset[attachable_id]" value="<%= object.id %>"/>
+                <input type="hidden" id="asset_attachable_class" value="<%= object.class.name %>"/>
+
+                <div id="asset_add" class="fields file_fields" style="display:<%= asset_types.size > 1 ? "none" : "block" %>">
+
+                  <div id="asset_add_div">
+                    <iframe src="javascript:false" name="asset_add_uploader" id="asset_add_uploader"></iframe>
+                  </div>
+                </div>
+            <% end %>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-small" data-dismiss="modal">Never Mind</button>
+          </div>
+        </div>
+      </div>
+    </div>
+<% end %>
+

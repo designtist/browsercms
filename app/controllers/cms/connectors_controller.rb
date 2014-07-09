@@ -1,14 +1,13 @@
 module Cms
 class ConnectorsController < Cms::BaseController
   
-  before_filter :set_toolbar_tab
   before_filter :load_page, :only => [:new, :create]
   
   def new    
     @block_type = ContentType.find_by_key(params[:block_type] || session[:last_block_type] || 'html_block')
     @container = params[:container]
     @connector = @page.connectors.build(:container => @container)
-    @blocks = @block_type.model_class.all(:order => "name", :conditions => ["deleted = ?", false])      
+    @blocks = @block_type.model_class.where(["deleted = ?", false]).order("name")
   end
 
   def create
@@ -32,7 +31,10 @@ class ConnectorsController < Cms::BaseController
     else
       flash[:error] = "Failed to remove '#{@connectable.name}' from the '#{@connector.container}' container"
     end
-    redirect_to @page.path
+    respond_to do |format|
+      format.html { redirect_to @page.path  }
+      format.json { render :json => @connector }
+    end
   end
 
   { #Define actions for moving connectors around
@@ -50,7 +52,12 @@ class ConnectorsController < Cms::BaseController
       else
         flash[:error] = "Failed to move '#{@connectable.name}' #{where} the '#{@connector.container}' container"
       end
-      redirect_to @page.path    
+
+      respond_to do |format|
+        format.html { redirect_to @page.path  }
+        format.json { render :json => @connector }
+      end
+
     end
   end
 
@@ -58,8 +65,6 @@ class ConnectorsController < Cms::BaseController
     def load_page
       @page = Page.find(params[:page_id])
     end
-    def set_toolbar_tab
-      @toolbar_tab = :content_library
-    end
+
 end
 end

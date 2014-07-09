@@ -1,7 +1,6 @@
 class CreateCatalogs < ActiveRecord::Migration
   def change
-    Cms::ContentType.create!(:name => "Catalog", :group_name => "Testing")
-    create_content_table :catalogs, :prefix=>false do |t|
+    create_content_table :catalogs do |t|
       t.string :name
 
       t.timestamps

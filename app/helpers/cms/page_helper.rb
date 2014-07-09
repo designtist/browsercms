@@ -1,27 +1,75 @@
 module Cms
+
+  # Deprecated in 4.0. Remove in 4.1
+  module DeprecatedBehavior
+
+    # Add the code to render the CMS toolbar.
+    # @deprecated This method is no longer required for BrowserCMS templates.
+    def cms_toolbar
+      ActiveSupport::Deprecation.warn "The cms_toolbar helper is deprecated and no longer necessary. You can safely remove <%= cms_toolbar %> from templates.", caller
+      return ""
+    end
+
+    def deprecated_set_page_title_usage(args)
+      ActiveSupport::Deprecation.warn "Calling page_title('#{args.first}') is deprecated and will be remove in 4.1. Call use_page_title('#{args.first}') instead.", caller
+      use_page_title args.first
+    end
+  end
+
   module PageHelper
+    include Cms::DeprecatedBehavior
+
+    # Keep this taller until we reverse the iframes (so menus will work)
+    PAGE_TOOLBAR_HEIGHT = 159
+    TOOLBAR_HEIGHT = 100
 
     # Return the JS file to load the configured default WYSIWYG editor
     #
     # Ideally, this could be improved if sprockets allows for dynamically determining which js library to use.
+    # @return [String] Names of the JS file needed to load the editor.
     def cms_content_editor
       "bcms/#{Cms.content_editor}"
     end
 
-    # Outputs the title for this page. Used by both internal CMS pages, as well as page templates. If not explicitily set,
-    #   returns the title of the page.
+    # Outputs the title for this page. Used by both internal CMS pages, as well as page templates. Call use_page_title to
+    # change this value.
     #
-    # @param [String] The name this page should be set to.
+    # @param [String] If provided, this is the name of the page to set. (This usage is deprecated in 4.0 and will be removed in 4.1)
     # @return [String] The title of the page.
     def page_title(*args)
       if args.first
-        # Removed unneeded indirection/fixed issue where @template is frozen in r1.9.1
-        @page_title = args.first
+        deprecated_set_page_title_usage(args)
       else
-        @page_title ? @page_title : current_page.page_title
+        if @page_title
+          @page_title
+        elsif current_page
+          current_page.page_title
+        else
+          "Untitled"
+        end
       end
-    end    
-    
+    end
+
+    # Returns the Page title in an In Context editable area.
+    #
+    # Use for h1/h2 elements. Use page_title for title elements.
+    def page_header()
+      if (is_current_user_able_to_edit_this_content?(current_page))
+        options = {id: 'page_title', contenteditable: true, data: {attribute: "title", content_name: "page", id: current_page.id, page_id: current_page.id}}
+        content_tag "div", page_title, options
+      else
+        page_title
+      end
+    end
+
+    # Allows Views to set what will be displayed as the <title> element for Page Templates (and Cms admin pages.)
+    #
+    def use_page_title(title)
+      # Implementation note: This method is named use_page_title rather than page_title= because ruby will create a
+      # local variable if you call <%= page_title = "A New Page Name" %>
+      @page_title = title
+    end
+
     def current_page
       @page
     end
@@ -32,12 +80,13 @@ module Cms
     # @return [String] The HTML content for the container.
     def container(name)
       content = content_for(name)
-      if logged_in? && @page && @mode == "edit" && current_user.able_to_edit?(@page)
-        render :partial => 'cms/pages/edit_container', :locals => {:name => name, :content => content}
+      if is_current_user_able_to_edit_this_content?(@page)
+        render :partial => 'cms/pages/simple_container', :locals => {:name => name, :content => content, :container => name}
       else
         content
       end
-    end    
+    end
+
     # Determine if a given container has any blocks within it. Useful for determine if markup should be conditionally included
     # when a block is present, but not shown if no block was added. For example:
     #
@@ -51,7 +100,7 @@ module Cms
     # @param [Proc] block
     # @return [Boolean] True if the container has one or more blocks, or if we are in edit mode. False otherwise. 
     def container_has_block?(name, &block)
-      has_block = (@mode == "edit") || current_page.connectable_count_for_container(name) > 0
+      has_block = (edit_mode?) || current_page.connectable_count_for_container(name) > 0
       logger.info "mode = #{@mode}, has_block = #{has_block}"
       if block_given?
         concat(capture(&block)) if has_block
@@ -59,16 +108,6 @@ module Cms
         has_block
       end
     end
-
-    # Add the code to render the CMS toolbar.
-    def cms_toolbar
-      toolbar = <<HTML
-<iframe src="#{cms.toolbar_path(:page_id => @page.id, :page_version => @page.version, :mode => @mode, :page_toolbar => @show_page_toolbar ? 1 : 0) }" width="100%" height="#{@show_page_toolbar ? 159 : 100 }px" frameborder="0" marginwidth="0" marginheight="0" scrolling="no" name="cms_toolbar"></iframe>
-HTML
-      toolbar.html_safe if @show_toolbar
-    end
-
-
 
     # Renders breadcrumbs based on the current_page. This will generate an unordered list representing the
     # current page and all it's ancestors including the root name of of the site. The UL can be styled via CSS for
@@ -93,24 +132,24 @@ HTML
       show_parent = options[:show_parent].nil? ? false : options[:show_parent]
       ancestors = current_page.ancestors
       items = []
-      ancestors[start..ancestors.size].each_with_index do |sec,i|
-        items << content_tag(:li, 
-          link_to(sec.name, sec.actual_path), (i == 0 ? {:class => "first"} : {}))
+      ancestors[start..ancestors.size].each_with_index do |sec, i|
+        items << content_tag(:li,
+                             link_to(sec.name, sec.actual_path), (i == 0 ? {:class => "first"} : {}))
       end
-      if !show_parent && current_page.section.path == current_page.path
-        items[items.size-1] = content_tag(:li, current_page.section.name)
+      if !show_parent && current_page.landing_page?
+        items[items.size-1] = content_tag(:li, current_page.parent.name)
       else
         items << content_tag(:li, current_page.page_title)
       end
       content_tag(:ul, "\n  #{items.join("\n  ")}\n".html_safe, :class => "breadcrumbs")
     end
-    
+
     def render_portlet(name)
       portlets = Portlet.all(:conditions => ["name = ?", name.to_s])
       if portlets.size > 1
-        @mode == "edit" ? "ERROR: Multiple Portlets with name '#{name}'" : nil
+        edit_mode? ? "ERROR: Multiple Portlets with name '#{name}'" : nil
       elsif portlets.empty?
-        @mode == "edit" ? "ERROR: No Portlet with name '#{name}'" : nil
+        edit_mode? ? "ERROR: No Portlet with name '#{name}'" : nil
       else
         render_connectable(portlets.first)
       end
@@ -122,5 +161,9 @@ HTML
       return ''
     end
 
+    # Determines whether this page is in edit mode or not.
+    def edit_mode?()
+      @mode == "edit"
+    end
   end
 end

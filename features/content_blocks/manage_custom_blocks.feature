@@ -3,12 +3,11 @@ Feature: Manage Content Blocks
   This blocks will be generated as Rails resources, with a controller and views.
 
   Background:
-    Given a Content Type named "Product" is registered
-    And I am logged in as a Content Editor
+    Given I am logged in as a Content Editor
 
   Scenario: List Content Blocks
-    When I request /cms/products
-    Then I should see "List Products"
+    When I view products in the content library
+    Then I should be returned to the Assets page for "Products"
 
   Scenario: List Content Blocks
     When I request /cms/content_library
@@ -23,13 +22,12 @@ Feature: Manage Content Blocks
       | Tag           |
 
   Scenario: Create a new block
-    When I request /cms/products/new
-    Then I should see "Add New Product"
+    When I add a new product
+    Then I should see a page named "Add a New Product"
     When I fill in "Name" with "iPhone"
-    And I fill in "Price" with "400"
-    And I click on "Save"
-    Then I should see "iPhone"
-    Then I should see "400"
+    And I fill in "Slug" with "/iphone"
+    And I click the Save button
+    Then a new product should be created
 
   Scenario: Delete a block
     Given the following products exist:
@@ -37,28 +35,11 @@ Feature: Manage Content Blocks
       | 1  | iPhone      | 400   |
       | 2  | Kindle Fire | 200   |
     When I delete "Kindle Fire"
-    Then I should be redirected to /cms/products
-
-  Scenario: Add to a page
-    When I visit /
-    And I turn on edit mode for /
-    And I add content to the main area of the page
-    And I click on "Product"
-    And I fill in "Name" with "iPhone"
-    And I click on "Save"
-    Then the response should be 200
-    And I should see "Name: iPhone"
-
-  Scenario: View Usages
-    Given a product "iPhone" has been added to a page
-    When I view that product
-    Then the response should be 200
-    And the page header should be "View Product 'iPhone'"
-    And I should see "Used on: 1 page"
+    Then I should be returned to the view products page in the content library
 
   Scenario: Multiple Pages
     Given there are multiple pages of products in the Content Library
-    When I request /cms/products
+    When I view products in the content library
     Then I should see the paging controls
     And I click on "next_page_link"
     Then I should see the second page of content
@@ -69,10 +50,21 @@ Feature: Manage Content Blocks
     When I view a page that lists products
     Then I should be able to click on a link to see a product
 
+  Scenario: View Product Page
+    Given I am a guest
+    And a product with a slug "about-us" exists
+    When I visit "/products/about-us"
+    Then I should see that product's page
 
+  Scenario: Nonexistant Product
+    Given no product with a slug "some-path" exists
+    And I am not logged in
+    When I visit "/products/some-path"
+    Then I should see the CMS 404 page
 
-
-
+  Scenario: Looking at older versions
+    Given a product exists with two versions
+    Then I should be able to see the version history for that product
 
 
 
